@@ -1,0 +1,22 @@
+﻿---
+BasedOnStyle: LLVM
+IndentWidth: 4
+---
+Language: Cpp
+AccessModifierOffset: -4
+AlignEscapedNewlines: Left
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Empty
+AlwaysBreakAfterReturnType: None
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterFunction: true
+    SplitEmptyFunction: false
+    SplitEmptyNamespace: false
+    SplitEmptyRecord: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+SpaceAfterTemplateKeyword: false
+SpacesInContainerLiterals: false
+...
