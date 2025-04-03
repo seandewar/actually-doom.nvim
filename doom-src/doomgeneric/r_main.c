@@ -18,17 +18,21 @@
 //      See tables.c, too.
 //
 
-#include <math.h>
 #include <stdlib.h>
 
 #include "d_loop.h"
-#include "doomdef.h"
-
+#include "d_player.h"
 #include "m_bbox.h"
 #include "m_menu.h"
-
-#include "r_local.h"
+#include "r_bsp.h"
+#include "r_data.h"
+#include "r_defs.h"
+#include "r_draw.h"
+#include "r_main.h"
+#include "r_plane.h"
 #include "r_sky.h"
+#include "r_state.h"
+#include "r_things.h"
 
 // Fineangles in the SCREENWIDTH wide window.
 #define FIELDOFVIEW 2048

@@ -18,20 +18,19 @@
 //      e.g. inline assembly, different algorithms.
 //
 
-#include "deh_main.h"
-#include "doomdef.h"
+#include <string.h>
 
+#include "doomdef.h"
+#include "doomstat.h"
 #include "i_system.h"
+#include "r_defs.h"
+#include "r_main.h"
+#include "r_state.h"
 #include "w_wad.h"
 #include "z_zone.h"
 
-#include "r_local.h"
-
 // Needs access to LFB (guess what).
 #include "v_video.h"
-
-// State.
-#include "doomstat.h"
 
 // ?
 #define MAXWIDTH 1120
@@ -266,6 +265,8 @@ void R_DrawFuzzColumn(void)
     fixed_t frac;
     fixed_t fracstep;
 
+    (void)frac;
+
     // Adjust borders. Low...
     if (!dc_yl)
         dc_yl = 1;
@@ -322,6 +323,8 @@ void R_DrawFuzzColumnLow(void)
     fixed_t frac;
     fixed_t fracstep;
     int x;
+
+    (void)frac;
 
     // Adjust borders. Low...
     if (!dc_yl)
@@ -739,10 +742,10 @@ void R_FillBackScreen(void)
     patch_t *patch;
 
     // DOOM border patch.
-    char *name1 = DEH_String("FLOOR7_2");
+    char *name1 = "FLOOR7_2";
 
     // DOOM II border patch.
-    char *name2 = DEH_String("GRNROCK");
+    char *name2 = "GRNROCK";
 
     char *name;
 
@@ -789,35 +792,35 @@ void R_FillBackScreen(void)
 
     V_UseBuffer(background_buffer);
 
-    patch = W_CacheLumpName(DEH_String("brdr_t"), PU_CACHE);
+    patch = W_CacheLumpName("brdr_t", PU_CACHE);
 
     for (x = 0; x < scaledviewwidth; x += 8)
         V_DrawPatch(viewwindowx + x, viewwindowy - 8, patch);
-    patch = W_CacheLumpName(DEH_String("brdr_b"), PU_CACHE);
+    patch = W_CacheLumpName("brdr_b", PU_CACHE);
 
     for (x = 0; x < scaledviewwidth; x += 8)
         V_DrawPatch(viewwindowx + x, viewwindowy + viewheight, patch);
-    patch = W_CacheLumpName(DEH_String("brdr_l"), PU_CACHE);
+    patch = W_CacheLumpName("brdr_l", PU_CACHE);
 
     for (y = 0; y < viewheight; y += 8)
         V_DrawPatch(viewwindowx - 8, viewwindowy + y, patch);
-    patch = W_CacheLumpName(DEH_String("brdr_r"), PU_CACHE);
+    patch = W_CacheLumpName("brdr_r", PU_CACHE);
 
     for (y = 0; y < viewheight; y += 8)
         V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy + y, patch);
 
     // Draw beveled edge.
     V_DrawPatch(viewwindowx - 8, viewwindowy - 8,
-                W_CacheLumpName(DEH_String("brdr_tl"), PU_CACHE));
+                W_CacheLumpName("brdr_tl", PU_CACHE));
 
     V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy - 8,
-                W_CacheLumpName(DEH_String("brdr_tr"), PU_CACHE));
+                W_CacheLumpName("brdr_tr", PU_CACHE));
 
     V_DrawPatch(viewwindowx - 8, viewwindowy + viewheight,
-                W_CacheLumpName(DEH_String("brdr_bl"), PU_CACHE));
+                W_CacheLumpName("brdr_bl", PU_CACHE));
 
     V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy + viewheight,
-                W_CacheLumpName(DEH_String("brdr_br"), PU_CACHE));
+                W_CacheLumpName("brdr_br", PU_CACHE));
 
     V_RestoreBuffer();
 }

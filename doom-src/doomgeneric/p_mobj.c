@@ -17,21 +17,19 @@
 //
 
 #include <stdio.h>
-
-#include "i_system.h"
-#include "m_random.h"
-#include "z_zone.h"
+#include <string.h>
 
 #include "doomdef.h"
-#include "p_local.h"
-#include "sounds.h"
-
-#include "hu_stuff.h"
-#include "st_stuff.h"
-
-#include "s_sound.h"
-
 #include "doomstat.h"
+#include "hu_stuff.h"
+#include "i_system.h"
+#include "m_random.h"
+#include "p_local.h"
+#include "r_main.h"
+#include "s_sound.h"
+#include "sounds.h"
+#include "st_stuff.h"
+#include "z_zone.h"
 
 void G_PlayerReborn(int player);
 void P_SpawnMapThing(mapthing_t *mthing);

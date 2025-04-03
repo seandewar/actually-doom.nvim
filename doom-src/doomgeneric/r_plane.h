@@ -19,7 +19,9 @@
 #ifndef __R_PLANE__
 #define __R_PLANE__
 
-#include "r_data.h"
+#include "i_video.h"
+#include "m_fixed.h"
+#include "r_defs.h"
 
 // Visplane related.
 extern short *lastopening;

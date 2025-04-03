@@ -23,9 +23,7 @@
 #endif
 
 #include "config.h"
-#include "doomfeatures.h"
 #include "doomtype.h"
-
 #include "i_sound.h"
 #include "i_video.h"
 #include "m_argv.h"

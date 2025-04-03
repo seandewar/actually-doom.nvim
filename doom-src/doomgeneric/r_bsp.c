@@ -16,20 +16,16 @@
 //      BSP traversal, handling of LineSegs for rendering.
 //
 
+#include <string.h>
+
 #include "doomdef.h"
-
-#include "m_bbox.h"
-
+#include "doomstat.h"
 #include "i_system.h"
-
+#include "m_bbox.h"
 #include "r_main.h"
 #include "r_plane.h"
-#include "r_things.h"
-
-// State.
-#include "doomstat.h"
 #include "r_state.h"
-
+#include "r_things.h"
 // #include "r_local.h"
 
 seg_t *curline;

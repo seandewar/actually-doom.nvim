@@ -19,6 +19,8 @@
 #ifndef V_PATCH_H
 #define V_PATCH_H
 
+#include "doomtype.h"
+
 // Patches.
 // A patch holds one or more columns.
 // Patches are used for sprites and all masked pictures,

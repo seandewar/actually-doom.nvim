@@ -284,14 +284,14 @@ void Z_DumpHeap(int lowtag, int hightag)
 {
     memblock_t *block;
 
-    printf("zone size: %i  location: %p\n", mainzone->size, mainzone);
+    printf("zone size: %i  location: %p\n", mainzone->size, (void *)mainzone);
 
     printf("tag range: %i to %i\n", lowtag, hightag);
 
     for (block = mainzone->blocklist.next;; block = block->next) {
         if (block->tag >= lowtag && block->tag <= hightag)
-            printf("block:%p    size:%7i    user:%p    tag:%3i\n", block,
-                   block->size, block->user, block->tag);
+            printf("block:%p    size:%7i    user:%p    tag:%3i\n",
+                   (void *)block, block->size, (void *)block->user, block->tag);
 
         if (block->next == &mainzone->blocklist) {
             // all blocks have been hit
@@ -316,11 +316,12 @@ void Z_FileDumpHeap(FILE *f)
 {
     memblock_t *block;
 
-    fprintf(f, "zone size: %i  location: %p\n", mainzone->size, mainzone);
+    fprintf(f, "zone size: %i  location: %p\n", mainzone->size,
+            (void *)mainzone);
 
     for (block = mainzone->blocklist.next;; block = block->next) {
-        fprintf(f, "block:%p    size:%7i    user:%p    tag:%3i\n", block,
-                block->size, block->user, block->tag);
+        fprintf(f, "block:%p    size:%7i    user:%p    tag:%3i\n",
+                (void *)block, block->size, (void *)block->user, block->tag);
 
         if (block->next == &mainzone->blocklist) {
             // all blocks have been hit

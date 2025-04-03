@@ -1,8 +1,8 @@
 #include <stdio.h>
-
-#include "m_argv.h"
+#include <stdlib.h>
 
 #include "doomgeneric.h"
+#include "m_argv.h"
 
 pixel_t *DG_ScreenBuffer = NULL;
 

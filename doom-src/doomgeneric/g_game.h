@@ -20,8 +20,8 @@
 #define __G_GAME__
 
 #include "d_event.h"
+#include "d_mode.h"
 #include "d_ticcmd.h"
-#include "doomdef.h"
 
 //
 // GAME

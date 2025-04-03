@@ -20,10 +20,10 @@
 
 #include "d_event.h"
 #include "doomdef.h"
-
-#include "p_local.h"
-
 #include "doomstat.h"
+#include "p_local.h"
+#include "p_spec.h"
+#include "r_main.h"
 
 // Index of the special effects (INVUL inverse) map.
 #define INVERSECOLORMAP 32

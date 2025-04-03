@@ -14,11 +14,7 @@
 // GNU General Public License for more details.
 //
 
-#include <stdio.h>
-
 #include "doomkeys.h"
-#include "doomtype.h"
-
 #include "m_config.h"
 #include "m_misc.h"
 

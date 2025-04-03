@@ -31,7 +31,7 @@ typedef boolean (*netgame_startup_callback_t)(int ready_players,
 typedef struct {
     // Read events from the event queue, and process them.
 
-    void (*ProcessEvents)();
+    void (*ProcessEvents)(void);
 
     // Given the current input state, fill in the fields of the specified
     // ticcmd_t structure with data for a new tic.
@@ -44,7 +44,7 @@ typedef struct {
 
     // Run the menu (runs independently of the game).
 
-    void (*RunMenu)();
+    void (*RunMenu)(void);
 } loop_interface_t;
 
 // Register callback functions for the main loop code to use.
@@ -70,8 +70,7 @@ boolean D_InitNetGame(net_connect_data_t *connect_data);
 // Start game with specified settings. The structure will be updated
 // with the actual settings for the game.
 
-void D_StartNetGame(net_gamesettings_t *settings,
-                    netgame_startup_callback_t callback);
+void D_StartNetGame(net_gamesettings_t *settings);
 
 extern boolean singletics;
 extern int gametic, ticdup;

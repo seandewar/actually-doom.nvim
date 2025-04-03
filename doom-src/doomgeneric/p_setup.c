@@ -17,26 +17,22 @@
 //      set up initial state and misc. LUTs.
 //
 
-#include <math.h>
-
-#include "z_zone.h"
-
-#include "deh_main.h"
-#include "i_swap.h"
-#include "m_argv.h"
-#include "m_bbox.h"
-
-#include "g_game.h"
-
-#include "i_system.h"
-#include "w_wad.h"
+#include <string.h>
 
 #include "doomdef.h"
-#include "p_local.h"
-
-#include "s_sound.h"
-
 #include "doomstat.h"
+#include "g_game.h"
+#include "i_swap.h"
+#include "i_system.h"
+#include "m_argv.h"
+#include "m_bbox.h"
+#include "p_local.h"
+#include "p_spec.h"
+#include "r_data.h"
+#include "r_things.h"
+#include "s_sound.h"
+#include "w_wad.h"
+#include "z_zone.h"
 
 void P_SpawnMapThing(mapthing_t *mthing);
 
@@ -676,7 +672,7 @@ static void P_LoadReject(int lumpnum)
 //
 // P_SetupLevel
 //
-void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
+void P_SetupLevel(int episode, int map)
 {
     int i;
     char lumpname[9];
@@ -704,9 +700,9 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     // find map name
     if (gamemode == commercial) {
         if (map < 10)
-            DEH_snprintf(lumpname, 9, "map0%i", map);
+            snprintf(lumpname, 9, "map0%i", map);
         else
-            DEH_snprintf(lumpname, 9, "map%i", map);
+            snprintf(lumpname, 9, "map%i", map);
     } else {
         lumpname[0] = 'E';
         lumpname[1] = '0' + episode;

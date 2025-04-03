@@ -23,7 +23,6 @@
 #include <string.h>
 
 #include "doomtype.h"
-
 #include "i_video.h"
 #include "m_argv.h"
 #include "z_zone.h"

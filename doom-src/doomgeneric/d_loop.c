@@ -19,26 +19,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "doomfeatures.h"
-
 #include "d_event.h"
 #include "d_loop.h"
 #include "d_ticcmd.h"
-
 #include "i_system.h"
 #include "i_timer.h"
 #include "i_video.h"
-
-#include "m_argv.h"
 #include "m_fixed.h"
-
 #include "net_client.h"
-#include "net_gui.h"
-#include "net_io.h"
-#include "net_loop.h"
-#include "net_query.h"
-#include "net_sdl.h"
-#include "net_server.h"
 
 // The complete set of data for a particular tic.
 
@@ -288,8 +276,7 @@ void D_StartGameLoop(void)
     lasttime = GetAdjustedTime() / ticdup;
 }
 
-void D_StartNetGame(net_gamesettings_t *settings,
-                    netgame_startup_callback_t callback)
+void D_StartNetGame(net_gamesettings_t *settings)
 {
     settings->consoleplayer = 0;
     settings->num_players = 1;

@@ -16,33 +16,23 @@
 // DESCRIPTION:  the automap code
 //
 
-#include <stdio.h>
+#include <string.h>
 
-#include "deh_main.h"
-
+#include "am_map.h"
+#include "d_englsh.h"
 #include "doomdef.h"
-#include "doomkeys.h"
+#include "doomstat.h"
+#include "m_cheat.h"
+#include "m_controls.h"
+#include "m_misc.h"
 #include "p_local.h"
+#include "r_state.h"
 #include "st_stuff.h"
 #include "w_wad.h"
 #include "z_zone.h"
 
-#include "i_system.h"
-#include "m_cheat.h"
-#include "m_controls.h"
-#include "m_misc.h"
-
 // Needs access to LFB.
 #include "v_video.h"
-
-// State.
-#include "doomstat.h"
-#include "r_state.h"
-
-// Data.
-#include "dstrings.h"
-
-#include "am_map.h"
 
 // For use if I do walls with outsides/insides
 #define REDS (256 - 5 * 16)
@@ -386,7 +376,7 @@ void AM_changeWindowLoc(void)
 void AM_initVariables(void)
 {
     int pnum;
-    static event_t st_notify = {ev_keyup, AM_MSGENTERED, 0, 0};
+    static event_t st_notify = {ev_keyup, AM_MSGENTERED, 0, 0, 0};
 
     automapactive = true;
     fb = I_VideoBuffer;
@@ -436,7 +426,7 @@ void AM_loadPics(void)
     char namebuf[9];
 
     for (i = 0; i < 10; i++) {
-        DEH_snprintf(namebuf, 9, "AMMNUM%d", i);
+        snprintf(namebuf, 9, "AMMNUM%d", i);
         marknums[i] = W_CacheLumpName(namebuf, PU_STATIC);
     }
 }
@@ -447,7 +437,7 @@ void AM_unloadPics(void)
     char namebuf[9];
 
     for (i = 0; i < 10; i++) {
-        DEH_snprintf(namebuf, 9, "AMMNUM%d", i);
+        snprintf(namebuf, 9, "AMMNUM%d", i);
         W_ReleaseLumpName(namebuf);
     }
 }
@@ -484,7 +474,7 @@ void AM_LevelInit(void)
 
 void AM_Stop(void)
 {
-    static event_t st_notify = {0, ev_keyup, AM_MSGEXITED, 0};
+    static event_t st_notify = {0, ev_keyup, AM_MSGEXITED, 0, 0};
 
     AM_unloadPics();
     automapactive = false;
@@ -597,23 +587,23 @@ boolean AM_Responder(event_t *ev)
             followplayer = !followplayer;
             f_oldloc.x = INT_MAX;
             if (followplayer)
-                plr->message = DEH_String(AMSTR_FOLLOWON);
+                plr->message = AMSTR_FOLLOWON;
             else
-                plr->message = DEH_String(AMSTR_FOLLOWOFF);
+                plr->message = AMSTR_FOLLOWOFF;
         } else if (key == key_map_grid) {
             grid = !grid;
             if (grid)
-                plr->message = DEH_String(AMSTR_GRIDON);
+                plr->message = AMSTR_GRIDON;
             else
-                plr->message = DEH_String(AMSTR_GRIDOFF);
+                plr->message = AMSTR_GRIDOFF;
         } else if (key == key_map_mark) {
-            M_snprintf(buffer, sizeof(buffer), "%s %d",
-                       DEH_String(AMSTR_MARKEDSPOT), markpointnum);
+            M_snprintf(buffer, sizeof(buffer), "%s %d", AMSTR_MARKEDSPOT,
+                       markpointnum);
             plr->message = buffer;
             AM_addMark();
         } else if (key == key_map_clearmark) {
             AM_clearMarks();
-            plr->message = DEH_String(AMSTR_MARKSCLEARED);
+            plr->message = AMSTR_MARKSCLEARED;
         } else {
             rc = false;
         }
@@ -869,7 +859,7 @@ void AM_drawFline(fline_t *fl, int color)
     // For debugging only
     if (fl->a.x < 0 || fl->a.x >= f_w || fl->a.y < 0 || fl->a.y >= f_h
         || fl->b.x < 0 || fl->b.x >= f_w || fl->b.y < 0 || fl->b.y >= f_h) {
-        DEH_fprintf(stderr, "fuck %d \r", fuck++);
+        fprintf(stderr, "fuck %d \r", fuck++);
         return;
     }
 
@@ -1110,7 +1100,7 @@ void AM_drawPlayers(void)
     }
 }
 
-void AM_drawThings(int colors, int colorrange)
+void AM_drawThings(int colors)
 {
     int i;
     mobj_t *t;
@@ -1160,7 +1150,7 @@ void AM_Drawer(void)
     AM_drawWalls();
     AM_drawPlayers();
     if (cheating == 2)
-        AM_drawThings(THINGCOLORS, THINGRANGE);
+        AM_drawThings(THINGCOLORS);
     AM_drawCrosshair(XHAIRCOLORS);
 
     AM_drawMarks();

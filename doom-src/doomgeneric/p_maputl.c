@@ -22,13 +22,10 @@
 
 #include <stdlib.h>
 
-#include "m_bbox.h"
-
-#include "doomdef.h"
 #include "doomstat.h"
+#include "m_bbox.h"
 #include "p_local.h"
-
-// State.
+#include "r_main.h"
 #include "r_state.h"
 
 //

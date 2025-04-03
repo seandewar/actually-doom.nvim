@@ -21,21 +21,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "d_loop.h"
+#include "doomdef.h"
+#include "doomstat.h"
+#include "g_game.h"
 #include "i_system.h"
 #include "m_random.h"
-
-#include "doomdef.h"
 #include "p_local.h"
-
-#include "s_sound.h"
-
-#include "g_game.h"
-
-// State.
-#include "doomstat.h"
+#include "p_spec.h"
+#include "r_main.h"
 #include "r_state.h"
-
-// Data.
+#include "s_sound.h"
 #include "sounds.h"
 
 typedef enum {
@@ -1555,11 +1551,15 @@ void A_BabyMetal(mobj_t *mo)
 
 void A_OpenShotgun2(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     S_StartSound(player->mo, sfx_dbopn);
 }
 
 void A_LoadShotgun2(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     S_StartSound(player->mo, sfx_dbload);
 }
 
@@ -1577,6 +1577,8 @@ int braintargeton = 0;
 
 void A_BrainAwake(mobj_t *mo)
 {
+    (void)mo;
+
     thinker_t *thinker;
     mobj_t *m;
 
@@ -1603,6 +1605,8 @@ void A_BrainAwake(mobj_t *mo)
 
 void A_BrainPain(mobj_t *mo)
 {
+    (void)mo;
+
     S_StartSound(NULL, sfx_bospn);
 }
 
@@ -1652,6 +1656,8 @@ void A_BrainExplode(mobj_t *mo)
 
 void A_BrainDie(mobj_t *mo)
 {
+    (void)mo;
+
     G_ExitLevel();
 }
 

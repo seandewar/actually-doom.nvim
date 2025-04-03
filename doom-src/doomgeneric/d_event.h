@@ -19,8 +19,6 @@
 #ifndef __D_EVENT__
 #define __D_EVENT__
 
-#include "doomtype.h"
-
 //
 // Event handling.
 //

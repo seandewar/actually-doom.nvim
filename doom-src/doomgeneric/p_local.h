@@ -19,9 +19,9 @@
 #ifndef __P_LOCAL__
 #define __P_LOCAL__
 
-#ifndef __R_LOCAL__
-#include "r_local.h"
-#endif
+#include "d_player.h"
+#include "d_think.h"
+#include "r_defs.h"
 
 #define FLOATSPEED (FRACUNIT * 4)
 
@@ -235,10 +235,5 @@ void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher);
 
 void P_DamageMobj(mobj_t *target, mobj_t *inflictor, mobj_t *source,
                   int damage);
-
-//
-// P_SPEC
-//
-#include "p_spec.h"
 
 #endif // __P_LOCAL__

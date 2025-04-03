@@ -16,12 +16,12 @@
 //      LineOfSight/Visibility checks, uses REJECT Lookup Table.
 //
 
-#include "doomdef.h"
+#include <string.h>
 
+#include "doomdef.h"
 #include "i_system.h"
 #include "p_local.h"
-
-// State.
+#include "r_main.h"
 #include "r_state.h"
 
 //

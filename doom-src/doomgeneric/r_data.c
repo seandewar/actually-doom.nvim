@@ -18,23 +18,19 @@
 //
 
 #include <stdio.h>
-
-#include "deh_main.h"
-#include "i_swap.h"
-#include "i_system.h"
-#include "z_zone.h"
-
-#include "w_wad.h"
-
-#include "doomdef.h"
-#include "m_misc.h"
-#include "p_local.h"
-#include "r_local.h"
+#include <string.h>
 
 #include "doomstat.h"
-#include "r_sky.h"
-
+#include "i_swap.h"
+#include "i_system.h"
+#include "m_misc.h"
+#include "p_local.h"
 #include "r_data.h"
+#include "r_sky.h"
+#include "r_state.h"
+#include "v_patch.h"
+#include "w_wad.h"
+#include "z_zone.h"
 
 //
 // Graphics.
@@ -430,9 +426,11 @@ void R_InitTextures(void)
     int temp2;
     int temp3;
 
+    (void)totalwidth;
+
     // Load the patch names from pnames.lmp.
     name[8] = 0;
-    names = W_CacheLumpName(DEH_String("PNAMES"), PU_STATIC);
+    names = W_CacheLumpName("PNAMES", PU_STATIC);
     nummappatches = LONG(*((int *)names));
     name_p = names + 4;
     patchlookup =
@@ -442,20 +440,20 @@ void R_InitTextures(void)
         M_StringCopy(name, name_p + i * 8, sizeof(name));
         patchlookup[i] = W_CheckNumForName(name);
     }
-    W_ReleaseLumpName(DEH_String("PNAMES"));
+    W_ReleaseLumpName("PNAMES");
 
     // Load the map texture definitions from textures.lmp.
     // The data is contained in one or two lumps,
     //  TEXTURE1 for shareware, plus TEXTURE2 for commercial.
-    maptex = maptex1 = W_CacheLumpName(DEH_String("TEXTURE1"), PU_STATIC);
+    maptex = maptex1 = W_CacheLumpName("TEXTURE1", PU_STATIC);
     numtextures1 = LONG(*maptex);
-    maxoff = W_LumpLength(W_GetNumForName(DEH_String("TEXTURE1")));
+    maxoff = W_LumpLength(W_GetNumForName("TEXTURE1"));
     directory = maptex + 1;
 
-    if (W_CheckNumForName(DEH_String("TEXTURE2")) != -1) {
-        maptex2 = W_CacheLumpName(DEH_String("TEXTURE2"), PU_STATIC);
+    if (W_CheckNumForName("TEXTURE2") != -1) {
+        maptex2 = W_CacheLumpName("TEXTURE2", PU_STATIC);
         numtextures2 = LONG(*maptex2);
-        maxoff2 = W_LumpLength(W_GetNumForName(DEH_String("TEXTURE2")));
+        maxoff2 = W_LumpLength(W_GetNumForName("TEXTURE2"));
     } else {
         maptex2 = NULL;
         numtextures2 = 0;
@@ -480,8 +478,8 @@ void R_InitTextures(void)
     totalwidth = 0;
 
     //  Really complex printing shit...
-    temp1 = W_GetNumForName(DEH_String("S_START")); // P_???????
-    temp2 = W_GetNumForName(DEH_String("S_END")) - 1;
+    temp1 = W_GetNumForName("S_START"); // P_???????
+    temp2 = W_GetNumForName("S_END") - 1;
     temp3 = ((temp2 - temp1 + 63) / 64) + ((numtextures + 63) / 64);
 
     // If stdout is a real console, use the classic vanilla "filling
@@ -554,9 +552,9 @@ void R_InitTextures(void)
 
     Z_Free(patchlookup);
 
-    W_ReleaseLumpName(DEH_String("TEXTURE1"));
+    W_ReleaseLumpName("TEXTURE1");
     if (maptex2)
-        W_ReleaseLumpName(DEH_String("TEXTURE2"));
+        W_ReleaseLumpName("TEXTURE2");
 
     // Precalculate whatever possible.
 
@@ -580,8 +578,8 @@ void R_InitFlats(void)
 {
     int i;
 
-    firstflat = W_GetNumForName(DEH_String("F_START")) + 1;
-    lastflat = W_GetNumForName(DEH_String("F_END")) - 1;
+    firstflat = W_GetNumForName("F_START") + 1;
+    lastflat = W_GetNumForName("F_END") - 1;
     numflats = lastflat - firstflat + 1;
 
     // Create translation table for global animation.
@@ -603,8 +601,8 @@ void R_InitSpriteLumps(void)
     int i;
     patch_t *patch;
 
-    firstspritelump = W_GetNumForName(DEH_String("S_START")) + 1;
-    lastspritelump = W_GetNumForName(DEH_String("S_END")) - 1;
+    firstspritelump = W_GetNumForName("S_START") + 1;
+    lastspritelump = W_GetNumForName("S_END") - 1;
 
     numspritelumps = lastspritelump - firstspritelump + 1;
     spritewidth = Z_Malloc(numspritelumps * sizeof(*spritewidth), PU_STATIC, 0);
@@ -633,7 +631,7 @@ void R_InitColormaps(void)
 
     // Load in the light tables,
     //  256 byte align tables.
-    lump = W_GetNumForName(DEH_String("COLORMAP"));
+    lump = W_GetNumForName("COLORMAP");
     colormaps = W_CacheLumpNum(lump, PU_STATIC);
 }
 

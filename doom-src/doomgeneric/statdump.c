@@ -19,14 +19,10 @@ buffer to a file.
 
 */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "d_mode.h"
 #include "d_player.h"
 #include "m_argv.h"
-
 #include "statdump.h"
 
 /* Par times for E1M1-E1M9. */
@@ -54,4 +50,8 @@ void StatCopy(wbstartstruct_t *stats)
     }
 }
 
-void StatDump(void) {}
+void StatDump(void)
+{
+    (void)doom1_par_times;
+    (void)doom2_par_times;
+}

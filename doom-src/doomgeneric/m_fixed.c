@@ -16,10 +16,9 @@
 //      Fixed point implementation.
 //
 
-#include "stdlib.h"
-
-#include "doomtype.h"
-#include "i_system.h"
+#include <limits.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #include "m_fixed.h"
 

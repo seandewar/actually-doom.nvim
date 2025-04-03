@@ -15,18 +15,17 @@
 // DESCRIPTION:  none
 //
 
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "am_map.h"
+#include "d_englsh.h"
+#include "d_loop.h"
+#include "d_main.h"
 #include "doomdef.h"
-#include "doomkeys.h"
 #include "doomstat.h"
-
-#include "deh_main.h"
-#include "deh_misc.h"
-
 #include "f_finale.h"
+#include "hu_stuff.h"
 #include "i_system.h"
 #include "i_timer.h"
 #include "i_video.h"
@@ -35,32 +34,23 @@
 #include "m_menu.h"
 #include "m_misc.h"
 #include "m_random.h"
-#include "z_zone.h"
-
+#include "net_defs.h"
+#include "p_local.h"
 #include "p_saveg.h"
 #include "p_setup.h"
 #include "p_tick.h"
-
-#include "d_main.h"
-
-#include "am_map.h"
-#include "hu_stuff.h"
+#include "r_draw.h"
+#include "r_main.h"
+#include "s_sound.h"
+#include "sounds.h"
 #include "st_stuff.h"
 #include "statdump.h"
+#include "w_wad.h"
 #include "wi_stuff.h"
+#include "z_zone.h"
 
 // Needs access to LFB.
 #include "v_video.h"
-
-#include "w_wad.h"
-
-#include "p_local.h"
-
-#include "s_sound.h"
-
-// Data.
-#include "dstrings.h"
-#include "sounds.h"
 
 // SKY handling - still the wrong place.
 #include "r_data.h"
@@ -536,7 +526,7 @@ void G_DoLoadLevel(void)
     //  we look for an actual index, instead of simply
     //  setting one.
 
-    skyflatnum = R_FlatNumForName(DEH_String(SKYFLATNAME));
+    skyflatnum = R_FlatNumForName(SKYFLATNAME);
 
     // The "Sky never changes in Doom II" bug was fixed in
     // the id Anthology version of doom2.exe for Final Doom.
@@ -551,8 +541,6 @@ void G_DoLoadLevel(void)
         } else {
             skytexturename = "SKY3";
         }
-
-        skytexturename = DEH_String(skytexturename);
 
         skytexture = R_TextureNumForName(skytexturename);
     }
@@ -571,7 +559,7 @@ void G_DoLoadLevel(void)
         memset(players[i].frags, 0, sizeof(players[i].frags));
     }
 
-    P_SetupLevel(gameepisode, gamemap, 0, gameskill);
+    P_SetupLevel(gameepisode, gamemap);
     displayplayer = consoleplayer; // view the guy you are playing
     gameaction = ga_nothing;
     Z_CheckHeap();
@@ -782,7 +770,7 @@ void G_Ticker(void)
             break;
         case ga_screenshot:
             V_ScreenShot("DOOM%02i.%s");
-            players[consoleplayer].message = DEH_String("screen shot");
+            players[consoleplayer].message = "screen shot";
             gameaction = ga_nothing;
             break;
         case ga_nothing:
@@ -964,11 +952,11 @@ void G_PlayerReborn(int player)
 
     p->usedown = p->attackdown = true; // don't do anything immediately
     p->playerstate = PST_LIVE;
-    p->health = deh_initial_health; // Use dehacked value
+    p->health = 100;
     p->readyweapon = p->pendingweapon = wp_pistol;
     p->weaponowned[wp_fist] = true;
     p->weaponowned[wp_pistol] = true;
-    p->ammo[am_clip] = deh_initial_bullets;
+    p->ammo[am_clip] = 50;
 
     for (i = 0; i < NUMAMMO; i++)
         p->maxammo[i] = maxammo[i];
@@ -1494,7 +1482,7 @@ void G_DoSaveGame(void)
     gameaction = ga_nothing;
     M_StringCopy(savedescription, "", sizeof(savedescription));
 
-    players[consoleplayer].message = DEH_String(GGSAVED);
+    players[consoleplayer].message = GGSAVED;
 
     // draw the pattern into the back screen
     R_FillBackScreen();
@@ -1668,8 +1656,6 @@ void G_InitNew(skill_t skill, int episode, int map)
             break;
         }
     }
-
-    skytexturename = DEH_String(skytexturename);
 
     skytexture = R_TextureNumForName(skytexturename);
 

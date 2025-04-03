@@ -33,7 +33,7 @@ enum {
     wipe_NUMWIPES
 };
 
-int wipe_StartScreen(int x, int y, int width, int height);
+int wipe_StartScreen(void);
 
 int wipe_EndScreen(int x, int y, int width, int height);
 

@@ -18,23 +18,19 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 
-// Functions.
-#include "deh_main.h"
+#include "d_englsh.h"
+#include "d_event.h"
+#include "d_main.h"
+#include "doomstat.h"
 #include "i_swap.h"
-#include "i_system.h"
+#include "r_state.h"
 #include "s_sound.h"
+#include "sounds.h"
 #include "v_video.h"
 #include "w_wad.h"
 #include "z_zone.h"
-
-// Data.
-#include "d_main.h"
-#include "dstrings.h"
-#include "sounds.h"
-
-#include "doomstat.h"
-#include "r_state.h"
 
 typedef enum {
     F_STAGE_TEXT,
@@ -134,11 +130,6 @@ void F_StartFinale(void)
             finaleflat = screen->background;
         }
     }
-
-    // Do dehacked substitutions of strings
-
-    finaletext = DEH_String(finaletext);
-    finaleflat = DEH_String(finaleflat);
 
     finalestage = F_STAGE_TEXT;
     finalecount = 0;
@@ -534,9 +525,9 @@ void F_CastDrawer(void)
     patch_t *patch;
 
     // erase the entire screen to a background
-    V_DrawPatch(0, 0, W_CacheLumpName(DEH_String("BOSSBACK"), PU_CACHE));
+    V_DrawPatch(0, 0, W_CacheLumpName("BOSSBACK", PU_CACHE));
 
-    F_CastPrint(DEH_String(castorder[castnum].name));
+    F_CastPrint(castorder[castnum].name);
 
     // draw the current frame in the middle of the screen
     sprdef = &sprites[caststate->sprite];
@@ -592,8 +583,8 @@ void F_BunnyScroll(void)
     int stage;
     static int laststage;
 
-    p1 = W_CacheLumpName(DEH_String("PFUB2"), PU_LEVEL);
-    p2 = W_CacheLumpName(DEH_String("PFUB1"), PU_LEVEL);
+    p1 = W_CacheLumpName("PFUB2", PU_LEVEL);
+    p2 = W_CacheLumpName("PFUB1", PU_LEVEL);
 
     V_MarkRect(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
@@ -614,7 +605,7 @@ void F_BunnyScroll(void)
         return;
     if (finalecount < 1180) {
         V_DrawPatch((SCREENWIDTH - 13 * 8) / 2, (SCREENHEIGHT - 8 * 8) / 2,
-                    W_CacheLumpName(DEH_String("END0"), PU_CACHE));
+                    W_CacheLumpName("END0", PU_CACHE));
         laststage = 0;
         return;
     }
@@ -627,7 +618,7 @@ void F_BunnyScroll(void)
         laststage = stage;
     }
 
-    DEH_snprintf(name, 10, "END%i", stage);
+    snprintf(name, 10, "END%i", stage);
     V_DrawPatch((SCREENWIDTH - 13 * 8) / 2, (SCREENHEIGHT - 8 * 8) / 2,
                 W_CacheLumpName(name, PU_CACHE));
 }
@@ -656,8 +647,6 @@ static void F_ArtScreenDrawer(void)
         default:
             return;
         }
-
-        lumpname = DEH_String(lumpname);
 
         V_DrawPatch(0, 0, W_CacheLumpName(lumpname, PU_CACHE));
     }

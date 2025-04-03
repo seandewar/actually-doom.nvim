@@ -18,14 +18,12 @@
 
 #include <string.h>
 
+#include "doomtype.h"
+#include "f_wipe.h"
 #include "i_video.h"
 #include "m_random.h"
 #include "v_video.h"
 #include "z_zone.h"
-
-#include "doomtype.h"
-
-#include "f_wipe.h"
 
 //
 //                       SCREEN WIPE PACKAGE
@@ -57,6 +55,8 @@ void wipe_shittyColMajorXform(short *array, int width, int height)
 
 int wipe_initColorXForm(int width, int height, int ticks)
 {
+    (void)ticks;
+
     memcpy(wipe_scr, wipe_scr_start, width * height);
     return 0;
 }
@@ -99,6 +99,10 @@ int wipe_doColorXForm(int width, int height, int ticks)
 
 int wipe_exitColorXForm(int width, int height, int ticks)
 {
+    (void)width;
+    (void)height;
+    (void)ticks;
+
     return 0;
 }
 
@@ -107,6 +111,8 @@ static int *y;
 int wipe_initMelt(int width, int height, int ticks)
 {
     int i, r;
+
+    (void)ticks;
 
     // copy start screen to main screen
     memcpy(wipe_scr, wipe_scr_start, width * height);
@@ -179,13 +185,17 @@ int wipe_doMelt(int width, int height, int ticks)
 
 int wipe_exitMelt(int width, int height, int ticks)
 {
+    (void)width;
+    (void)height;
+    (void)ticks;
+
     Z_Free(y);
     Z_Free(wipe_scr_start);
     Z_Free(wipe_scr_end);
     return 0;
 }
 
-int wipe_StartScreen(int x, int y, int width, int height)
+int wipe_StartScreen(void)
 {
     wipe_scr_start = Z_Malloc(SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);
     I_ReadScreen(wipe_scr_start);
@@ -219,6 +229,8 @@ int wipe_ScreenWipe(int wipeno, int x, int y, int width, int height, int ticks)
     V_MarkRect(0, 0, width, height);
     rc = (*wipes[wipeno * 3 + 1])(width, height, ticks);
     //  V_DrawBlock(x, y, 0, width, height, wipe_scr); // DEBUG
+    (void)x;
+    (void)y;
 
     // final stuff
     if (rc) {

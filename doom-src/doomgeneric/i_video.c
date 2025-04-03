@@ -18,27 +18,15 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "i_video.h"
-#include "config.h"
-#include "d_event.h"
-#include "d_main.h"
-#include "m_argv.h"
-#include "v_video.h"
-#include "z_zone.h"
-
-#include "doomkeys.h"
-#include "tables.h"
-
-#include "doomgeneric.h"
-
-#include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include <fcntl.h>
-
-#include <stdarg.h>
-
-#include <sys/types.h>
+#include "config.h"
+#include "doomgeneric.h"
+#include "i_video.h"
+#include "m_argv.h"
+#include "tables.h"
+#include "z_zone.h"
 
 // #define CMAP256
 
@@ -254,6 +242,8 @@ void I_FinishUpdate(void)
     int x_offset, y_offset, x_offset_end;
     unsigned char *line_in, *line_out;
 
+    (void)y_offset;
+
     /* Offsets in case FB is bigger than DOOM */
     /* 600 = s_Fb heigt, 200 screenheight */
     /* 600 = s_Fb heigt, 200 screenheight */
@@ -403,12 +393,18 @@ void I_SetWindowTitle(char *title)
 
 void I_GraphicsCheckCommandLine(void) {}
 
-void I_SetGrabMouseCallback(grabmouse_callback_t func) {}
+void I_SetGrabMouseCallback(grabmouse_callback_t func)
+{
+    (void)func;
+}
 
 void I_EnableLoadingDisk(void) {}
 
 void I_BindVideoVariables(void) {}
 
-void I_DisplayFPSDots(boolean dots_on) {}
+void I_DisplayFPSDots(boolean dots_on)
+{
+    (void)dots_on;
+}
 
 void I_CheckIsScreensaver(void) {}

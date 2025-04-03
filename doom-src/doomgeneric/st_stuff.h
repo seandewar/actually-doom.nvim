@@ -23,6 +23,7 @@
 
 #include "d_event.h"
 #include "doomtype.h"
+#include "i_video.h"
 #include "m_cheat.h"
 
 // Size of statusbar.

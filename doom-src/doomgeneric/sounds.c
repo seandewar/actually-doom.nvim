@@ -19,7 +19,6 @@
 
 #include <stdlib.h>
 
-#include "doomtype.h"
 #include "sounds.h"
 
 //

@@ -33,9 +33,8 @@ char *doom2_endmsg[] = {
     // QuitDOOM II messages
     "are you sure you want to\nquit this great game?",
     "you want to quit?\nthen, thou hast lost an eighth!",
-    // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
-    "don't go now, there's a \ndimensional shambler waiting\nat the dos "
-    "prompt!",
+    ("don't go now, there's a \ndimensional shambler waiting\nat the dos "
+     "prompt!"),
     "get outta here and go back\nto your boring programs.",
     "if i were your boss, i'd \n deathmatch ya in a minute!",
     "look, bud. you leave now\nand you forfeit your body count!",

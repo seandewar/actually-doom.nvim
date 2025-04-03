@@ -15,11 +15,10 @@
 // DESCRIPTION:
 //
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <stdarg.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -29,21 +28,10 @@
 #endif
 
 #include "config.h"
-
-#include "deh_str.h"
 #include "doomtype.h"
-#include "i_joystick.h"
-#include "i_sound.h"
-#include "i_timer.h"
-#include "i_video.h"
-#include "m_argv.h"
-#include "m_config.h"
-#include "m_misc.h"
-
 #include "i_system.h"
-
-#include "w_wad.h"
-#include "z_zone.h"
+#include "m_argv.h"
+#include "m_misc.h"
 
 #ifdef __MACOSX__
 #include <CoreFoundation/CFUserNotification.h>
@@ -76,7 +64,12 @@ void I_AtExit(atexit_func_t func, boolean run_on_error)
 
 // Tactile feedback function, probably used for the Logitech Cyberman
 
-void I_Tactile(int on, int off, int total) {}
+void I_Tactile(int on, int off, int total)
+{
+    (void)on;
+    (void)off;
+    (void)total;
+}
 
 // Zone memory auto-allocation function that allocates the zone size
 // by trying progressively smaller zone sizes until one is found that
@@ -141,7 +134,7 @@ byte *I_ZoneBase(int *size)
 
     zonemem = AutoAllocMemory(size, default_ram, min_ram);
 
-    printf("zone memory: %p, %x allocated for zone\n", zonemem, *size);
+    printf("zone memory: %p, %x allocated for zone\n", (void *)zonemem, *size);
 
     return zonemem;
 }

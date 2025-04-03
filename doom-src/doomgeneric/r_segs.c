@@ -18,14 +18,21 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "i_system.h"
+#include <string.h>
 
 #include "doomdef.h"
 #include "doomstat.h"
-
-#include "r_local.h"
-#include "r_sky.h"
+#include "i_system.h"
+#include "r_bsp.h"
+#include "r_data.h"
+#include "r_defs.h"
+#include "r_draw.h"
+#include "r_main.h"
+#include "r_plane.h"
+#include "r_state.h"
+#include "r_things.h"
+#include "tables.h"
+#include "v_patch.h"
 
 // OPTIMIZE: closed two sided lines as single sided
 

@@ -21,30 +21,23 @@
 //
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "doomdef.h"
 #include "doomstat.h"
-
-#include "deh_main.h"
+#include "g_game.h"
 #include "i_system.h"
 #include "m_argv.h"
 #include "m_misc.h"
 #include "m_random.h"
+#include "p_local.h"
+#include "p_spec.h"
+#include "r_data.h"
+#include "r_state.h"
+#include "s_sound.h"
+#include "sounds.h"
 #include "w_wad.h"
 #include "z_zone.h"
-
-#include "p_local.h"
-#include "r_local.h"
-
-#include "g_game.h"
-
-#include "s_sound.h"
-
-// State.
-#include "r_state.h"
-
-// Data.
-#include "sounds.h"
 
 //
 // Animating textures and planes
@@ -139,8 +132,8 @@ void P_InitPicAnims(void)
     for (i = 0; animdefs[i].istexture != -1; i++) {
         char *startname, *endname;
 
-        startname = DEH_String(animdefs[i].startname);
-        endname = DEH_String(animdefs[i].endname);
+        startname = animdefs[i].startname;
+        endname = animdefs[i].endname;
 
         if (animdefs[i].istexture) {
             // different episode ?
@@ -1063,8 +1056,7 @@ void P_UpdateSpecials(void)
 #define DONUT_FLOORHEIGHT_DEFAULT 0x00000000
 #define DONUT_FLOORPIC_DEFAULT 0x16
 
-static void DonutOverrun(fixed_t *s3_floorheight, short *s3_floorpic,
-                         line_t *line, sector_t *pillar_sector)
+static void DonutOverrun(fixed_t *s3_floorheight, short *s3_floorpic)
 {
     static int first = 1;
     static int tmp_s3_floorheight;
@@ -1196,7 +1188,7 @@ int EV_DoDonut(line_t *line)
                         "NULL back sector. "
                         "Unexpected behavior may occur in Vanilla Doom.\n");
 
-                DonutOverrun(&s3_floorheight, &s3_floorpic, line, s1);
+                DonutOverrun(&s3_floorheight, &s3_floorpic);
             } else {
                 s3_floorheight = s3->floorheight;
                 s3_floorpic = s3->floorpic;
@@ -1314,7 +1306,7 @@ void P_SpawnSpecials(void)
 
         case 14:
             // DOOR RAISE IN 5 MINUTES
-            P_SpawnDoorRaiseIn5Mins(sector, i);
+            P_SpawnDoorRaiseIn5Mins(sector);
             break;
 
         case 17:

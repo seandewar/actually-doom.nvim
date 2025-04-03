@@ -18,19 +18,18 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "deh_main.h"
+#include "doomstat.h"
 #include "dstrings.h"
+#include "g_game.h"
 #include "i_system.h"
+#include "m_misc.h"
 #include "p_local.h"
 #include "p_saveg.h"
-#include "z_zone.h"
-
-// State.
-#include "doomstat.h"
-#include "g_game.h"
-#include "m_misc.h"
+#include "p_spec.h"
 #include "r_state.h"
+#include "z_zone.h"
 
 #define SAVEGAME_EOF 0x1d
 #define VERSIONSIZE 16
@@ -67,7 +66,7 @@ char *P_SaveGameFile(int slot)
         filename = malloc(filename_size);
     }
 
-    DEH_snprintf(basename, 32, SAVEGAMENAME "%d.dsg", slot);
+    snprintf(basename, 32, SAVEGAMENAME "%d.dsg", slot);
     M_snprintf(filename, filename_size, "%s%s", savegamedir, basename);
 
     return filename;

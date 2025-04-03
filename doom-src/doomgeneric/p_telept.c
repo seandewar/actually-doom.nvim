@@ -16,18 +16,11 @@
 //      Teleportation.
 //
 
-#include "doomdef.h"
 #include "doomstat.h"
-
-#include "s_sound.h"
-
 #include "p_local.h"
-
-// Data.
-#include "sounds.h"
-
-// State.
 #include "r_state.h"
+#include "s_sound.h"
+#include "sounds.h"
 
 //
 // TELEPORTATION

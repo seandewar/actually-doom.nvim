@@ -23,12 +23,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "i_system.h"
-
+#include "config.h"
 #include "doomtype.h"
-
-#include "deh_str.h"
 #include "i_swap.h"
+#include "i_system.h"
 #include "i_video.h"
 #include "m_bbox.h"
 #include "m_misc.h"
@@ -36,7 +34,6 @@
 #include "w_wad.h"
 #include "z_zone.h"
 
-#include "config.h"
 #ifdef HAVE_LIBPNG
 #include <png.h>
 #endif
@@ -757,13 +754,13 @@ void V_ScreenShot(char *format)
 #ifdef HAVE_LIBPNG
     if (png_screenshots) {
         WritePNGfile(lbmname, I_VideoBuffer, SCREENWIDTH, SCREENHEIGHT,
-                     W_CacheLumpName(DEH_String("PLAYPAL"), PU_CACHE));
+                     W_CacheLumpName("PLAYPAL", PU_CACHE));
     } else
 #endif
     {
         // save the pcx file
         WritePCXfile(lbmname, I_VideoBuffer, SCREENWIDTH, SCREENHEIGHT,
-                     W_CacheLumpName(DEH_String("PLAYPAL"), PU_CACHE));
+                     W_CacheLumpName("PLAYPAL", PU_CACHE));
     }
 }
 

@@ -17,22 +17,16 @@
 //    Configuration file interface.
 //
 
-#include <ctype.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "config.h"
-
-#include "doomfeatures.h"
 #include "doomkeys.h"
 #include "doomtype.h"
 #include "i_system.h"
 #include "m_argv.h"
 #include "m_misc.h"
-
-#include "z_zone.h"
 
 //
 // DEFAULTS
@@ -1700,7 +1694,10 @@ static const int scantokey[128] = {0,
                                    KEY_PRTSCR,
                                    0};
 
-static void SaveDefaultCollection(default_collection_t *collection) {}
+static void SaveDefaultCollection(default_collection_t *collection)
+{
+    (void)collection;
+}
 
 // Parses integer values in the configuration file
 
@@ -1755,7 +1752,10 @@ static void SetVariable(default_t *def, char *value)
     }
 }
 
-static void LoadDefaultCollection(default_collection_t *collection) {}
+static void LoadDefaultCollection(default_collection_t *collection)
+{
+    (void)collection;
+}
 
 // Set the default filenames to use for configuration files.
 
@@ -1995,7 +1995,7 @@ void M_SetConfigDir(char *dir)
 // Creates the directory as necessary.
 //
 
-char *M_GetSaveGameDir(char *iwadname)
+char *M_GetSaveGameDir(void)
 {
     char *savegamedir;
 

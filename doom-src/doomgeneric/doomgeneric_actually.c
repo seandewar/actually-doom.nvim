@@ -1,6 +1,6 @@
 #include "doomgeneric.h"
 
-int main(const int argc, char **const argv)
+int main(int argc, char **argv)
 {
     doomgeneric_Create(argc, argv);
 

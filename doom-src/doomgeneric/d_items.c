@@ -15,10 +15,8 @@
 // DESCRIPTION:
 //
 
-// We are referring to sprite numbers.
-#include "info.h"
-
 #include "d_items.h"
+#include "info.h"
 
 //
 // PSPRITE ACTIONS for waepons.

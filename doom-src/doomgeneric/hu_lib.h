@@ -19,7 +19,7 @@
 #define __HULIB__
 
 // We are referring to patches.
-#include "r_defs.h"
+#include "v_patch.h"
 
 // font stuff
 #define HU_CHARERASE KEY_BACKSPACE

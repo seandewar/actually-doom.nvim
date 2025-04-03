@@ -16,21 +16,15 @@
 //     to the IWAD type.
 //
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "config.h"
 #include "d_iwad.h"
-#include "deh_str.h"
-#include "doomkeys.h"
 #include "i_system.h"
 #include "m_argv.h"
-#include "m_config.h"
 #include "m_misc.h"
-#include "w_wad.h"
-#include "z_zone.h"
 
 static const iwad_t iwads[] = {
     {"doom2.wad", doom2, commercial, "Doom II"},
@@ -430,7 +424,7 @@ static char *SearchDirectoryForIWAD(char *dir, int mask, GameMission_t *mission)
             continue;
         }
 
-        filename = CheckDirectoryHasIWAD(dir, DEH_String(iwads[i].name));
+        filename = CheckDirectoryHasIWAD(dir, iwads[i].name);
 
         if (filename != NULL) {
             *mission = iwads[i].mission;

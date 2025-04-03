@@ -21,6 +21,8 @@
 
 #include <stdio.h>
 
+#include "doomtype.h"
+
 // maximum size of a savegame description
 
 #define SAVESTRINGSIZE 24

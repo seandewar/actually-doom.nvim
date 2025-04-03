@@ -16,10 +16,6 @@
 // SDL implementation of the Hexen CD interface.
 //
 
-#include <stdio.h>
-
-#include "doomtype.h"
-
 #include "i_cdmus.h"
 
 int cd_Error;
@@ -36,6 +32,8 @@ void I_CDMusPrintStartup(void) {}
 
 int I_CDMusPlay(int track)
 {
+    (void)track;
+
     return 0;
 }
 
@@ -52,6 +50,7 @@ int I_CDMusResume(void)
 int I_CDMusSetVolume(int volume)
 {
     /* Not supported yet */
+    (void)volume;
 
     cd_Error = 0;
 
@@ -70,5 +69,7 @@ int I_CDMusLastTrack(void)
 
 int I_CDMusTrackLength(int track_num)
 {
+    (void)track_num;
+
     return 0;
 }

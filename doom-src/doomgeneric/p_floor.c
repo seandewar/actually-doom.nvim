@@ -16,17 +16,13 @@
 //      Floor animation: raising stairs.
 //
 
-#include "doomdef.h"
-#include "p_local.h"
-#include "z_zone.h"
-
-#include "s_sound.h"
-
-// State.
 #include "doomstat.h"
+#include "p_local.h"
+#include "p_spec.h"
 #include "r_state.h"
-// Data.
+#include "s_sound.h"
 #include "sounds.h"
+#include "z_zone.h"
 
 //
 // FLOORS

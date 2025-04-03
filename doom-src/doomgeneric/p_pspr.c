@@ -13,32 +13,30 @@
 // GNU General Public License for more details.
 //
 // DESCRIPTION:
-//      Weapon sprite animation, weapon objects.
-//      Action functions for weapons.
+//	Weapon sprite animation, weapon objects.
+//	Action functions for weapons.
 //
 
+#include <string.h>
+
 #include "d_event.h"
+#include "d_items.h"
 #include "doomdef.h"
-
-#include "deh_misc.h"
-
+#include "doomstat.h"
 #include "m_random.h"
 #include "p_local.h"
-#include "s_sound.h"
-
-// State.
-#include "doomstat.h"
-
-// Data.
-#include "sounds.h"
-
 #include "p_pspr.h"
+#include "r_main.h"
+#include "s_sound.h"
+#include "sounds.h"
 
 #define LOWERSPEED FRACUNIT * 6
 #define RAISESPEED FRACUNIT * 6
 
 #define WEAPONBOTTOM 128 * FRACUNIT
 #define WEAPONTOP 32 * FRACUNIT
+
+#define BFG_CELLS_PER_SHOT 40
 
 //
 // P_SetPsprite
@@ -143,7 +141,7 @@ boolean P_CheckAmmo(player_t *player)
 
     // Minimal amount for one shot varies.
     if (player->readyweapon == wp_bfg)
-        count = deh_bfg_cells_per_shot;
+        count = BFG_CELLS_PER_SHOT;
     else if (player->readyweapon == wp_supershotgun)
         count = 2; // Double barrel.
     else
@@ -273,6 +271,8 @@ void A_WeaponReady(player_t *player, pspdef_t *psp)
 //
 void A_ReFire(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     // check for fire
     //  (if a weaponchange is pending, let it go through instead)
     if ((player->cmd.buttons & BT_ATTACK)
@@ -287,10 +287,12 @@ void A_ReFire(player_t *player, pspdef_t *psp)
 
 void A_CheckReload(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     P_CheckAmmo(player);
 #if 0
     if (player->ammo[am_shell]<2)
-        P_SetPsprite (player, ps_weapon, S_DSNR1);
+	P_SetPsprite (player, ps_weapon, S_DSNR1);
 #endif
 }
 
@@ -354,6 +356,8 @@ void A_Raise(player_t *player, pspdef_t *psp)
 //
 void A_GunFlash(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     P_SetMobjState(player->mo, S_PLAY_ATK2);
     P_SetPsprite(player, ps_flash, weaponinfo[player->readyweapon].flashstate);
 }
@@ -370,6 +374,8 @@ void A_Punch(player_t *player, pspdef_t *psp)
     angle_t angle;
     int damage;
     int slope;
+
+    (void)psp;
 
     damage = (P_Random() % 10 + 1) << 1;
 
@@ -397,6 +403,8 @@ void A_Saw(player_t *player, pspdef_t *psp)
     angle_t angle;
     int damage;
     int slope;
+
+    (void)psp;
 
     damage = 2 * (P_Random() % 10 + 1);
     angle = player->mo->angle;
@@ -431,9 +439,7 @@ void A_Saw(player_t *player, pspdef_t *psp)
 
 // Doom does not check the bounds of the ammo array.  As a result,
 // it is possible to use an ammo type > 4 that overflows into the
-// maxammo array and affects that instead.  Through dehacked, for
-// example, it is possible to make a weapon that decreases the max
-// number of ammo for another weapon.  Emulate this.
+// maxammo array and affects that instead. Emulate this.
 
 static void DecreaseAmmo(player_t *player, int ammonum, int amount)
 {
@@ -449,6 +455,8 @@ static void DecreaseAmmo(player_t *player, int ammonum, int amount)
 //
 void A_FireMissile(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     DecreaseAmmo(player, weaponinfo[player->readyweapon].ammo, 1);
     P_SpawnPlayerMissile(player->mo, MT_ROCKET);
 }
@@ -458,8 +466,10 @@ void A_FireMissile(player_t *player, pspdef_t *psp)
 //
 void A_FireBFG(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     DecreaseAmmo(player, weaponinfo[player->readyweapon].ammo,
-                 deh_bfg_cells_per_shot);
+                 BFG_CELLS_PER_SHOT);
     P_SpawnPlayerMissile(player->mo, MT_BFG);
 }
 
@@ -468,6 +478,8 @@ void A_FireBFG(player_t *player, pspdef_t *psp)
 //
 void A_FirePlasma(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     DecreaseAmmo(player, weaponinfo[player->readyweapon].ammo, 1);
 
     P_SetPsprite(player, ps_flash,
@@ -523,6 +535,8 @@ void P_GunShot(mobj_t *mo, boolean accurate)
 //
 void A_FirePistol(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     S_StartSound(player->mo, sfx_pistol);
 
     P_SetMobjState(player->mo, S_PLAY_ATK2);
@@ -540,6 +554,8 @@ void A_FirePistol(player_t *player, pspdef_t *psp)
 void A_FireShotgun(player_t *player, pspdef_t *psp)
 {
     int i;
+
+    (void)psp;
 
     S_StartSound(player->mo, sfx_shotgn);
     P_SetMobjState(player->mo, S_PLAY_ATK2);
@@ -562,6 +578,8 @@ void A_FireShotgun2(player_t *player, pspdef_t *psp)
     int i;
     angle_t angle;
     int damage;
+
+    (void)psp;
 
     S_StartSound(player->mo, sfx_dshtgn);
     P_SetMobjState(player->mo, S_PLAY_ATK2);
@@ -608,16 +626,22 @@ void A_FireCGun(player_t *player, pspdef_t *psp)
 //
 void A_Light0(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     player->extralight = 0;
 }
 
 void A_Light1(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     player->extralight = 1;
 }
 
 void A_Light2(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     player->extralight = 2;
 }
 
@@ -659,6 +683,8 @@ void A_BFGSpray(mobj_t *mo)
 //
 void A_BFGsound(player_t *player, pspdef_t *psp)
 {
+    (void)psp;
+
     S_StartSound(player->mo, sfx_bfg);
 }
 

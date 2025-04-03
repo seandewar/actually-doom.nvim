@@ -18,23 +18,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "i_sound.h"
-#include "i_system.h"
-
-#include "deh_str.h"
-#include "doomfeatures.h"
-
 #include "doomstat.h"
 #include "doomtype.h"
-
+#include "i_sound.h"
+#include "i_system.h"
+#include "m_misc.h"
+#include "r_main.h"
 #include "s_sound.h"
 #include "sounds.h"
-
-#include "m_argv.h"
-#include "m_misc.h"
-#include "m_random.h"
-
-#include "p_local.h"
 #include "w_wad.h"
 #include "z_zone.h"
 
@@ -552,7 +543,7 @@ void S_ChangeMusic(int musicnum, int looping)
 
     // get lumpnum if neccessary
     if (!music->lumpnum) {
-        M_snprintf(namebuf, sizeof(namebuf), "d_%s", DEH_String(music->name));
+        M_snprintf(namebuf, sizeof(namebuf), "d_%s", music->name);
         music->lumpnum = W_GetNumForName(namebuf);
     }
 

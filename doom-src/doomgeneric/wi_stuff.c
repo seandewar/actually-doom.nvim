@@ -18,31 +18,20 @@
 
 #include <stdio.h>
 
-#include "z_zone.h"
-
+#include "doomstat.h"
+#include "g_game.h"
+#include "i_swap.h"
+#include "i_video.h"
 #include "m_misc.h"
 #include "m_random.h"
-
-#include "deh_main.h"
-#include "i_swap.h"
-#include "i_system.h"
-
-#include "w_wad.h"
-
-#include "g_game.h"
-
-#include "r_local.h"
 #include "s_sound.h"
-
-#include "doomstat.h"
-
-// Data.
 #include "sounds.h"
+#include "w_wad.h"
+#include "wi_stuff.h"
+#include "z_zone.h"
 
 // Needs access to LFB.
 #include "v_video.h"
-
-#include "wi_stuff.h"
 
 //
 // Data needed to add patches to full screen intermission pics.
@@ -374,13 +363,6 @@ static patch_t *background;
 void WI_slamBackground(void)
 {
     V_DrawPatch(0, 0, background);
-}
-
-// The ticker is used to detect keys
-//  because of timing issues in netgames.
-boolean WI_Responder(event_t *ev)
-{
-    return false;
 }
 
 // Draws "<Levelname> Finished!"
@@ -1345,23 +1327,23 @@ static void WI_loadUnloadData(load_callback_t callback)
 
     if (gamemode == commercial) {
         for (i = 0; i < NUMCMAPS; i++) {
-            DEH_snprintf(name, 9, "CWILV%2.2d", i);
+            snprintf(name, 9, "CWILV%2.2d", i);
             callback(name, &lnames[i]);
         }
     } else {
         for (i = 0; i < NUMMAPS; i++) {
-            DEH_snprintf(name, 9, "WILV%d%d", wbs->epsd, i);
+            snprintf(name, 9, "WILV%d%d", wbs->epsd, i);
             callback(name, &lnames[i]);
         }
 
         // you are here
-        callback(DEH_String("WIURH0"), &yah[0]);
+        callback("WIURH0", &yah[0]);
 
         // you are here (alt.)
-        callback(DEH_String("WIURH1"), &yah[1]);
+        callback("WIURH1", &yah[1]);
 
         // splat
-        callback(DEH_String("WISPLAT"), &splat[0]);
+        callback("WISPLAT", &splat[0]);
 
         if (wbs->epsd < 3) {
             for (j = 0; j < NUMANIMS[wbs->epsd]; j++) {
@@ -1370,7 +1352,7 @@ static void WI_loadUnloadData(load_callback_t callback)
                     // MONDO HACK!
                     if (wbs->epsd != 1 || j != 8) {
                         // animations
-                        DEH_snprintf(name, 9, "WIA%d%.2d%.2d", wbs->epsd, j, i);
+                        snprintf(name, 9, "WIA%d%.2d%.2d", wbs->epsd, j, i);
                         callback(name, &a->p[i]);
                     } else {
                         // HACK ALERT!
@@ -1382,85 +1364,85 @@ static void WI_loadUnloadData(load_callback_t callback)
     }
 
     // More hacks on minus sign.
-    callback(DEH_String("WIMINUS"), &wiminus);
+    callback("WIMINUS", &wiminus);
 
     for (i = 0; i < 10; i++) {
         // numbers 0-9
-        DEH_snprintf(name, 9, "WINUM%d", i);
+        snprintf(name, 9, "WINUM%d", i);
         callback(name, &num[i]);
     }
 
     // percent sign
-    callback(DEH_String("WIPCNT"), &percent);
+    callback("WIPCNT", &percent);
 
     // "finished"
-    callback(DEH_String("WIF"), &finished);
+    callback("WIF", &finished);
 
     // "entering"
-    callback(DEH_String("WIENTER"), &entering);
+    callback("WIENTER", &entering);
 
     // "kills"
-    callback(DEH_String("WIOSTK"), &kills);
+    callback("WIOSTK", &kills);
 
     // "scrt"
-    callback(DEH_String("WIOSTS"), &secret);
+    callback("WIOSTS", &secret);
 
     // "secret"
-    callback(DEH_String("WISCRT2"), &sp_secret);
+    callback("WISCRT2", &sp_secret);
 
     // french wad uses WIOBJ (?)
-    if (W_CheckNumForName(DEH_String("WIOBJ")) >= 0) {
+    if (W_CheckNumForName("WIOBJ") >= 0) {
         // "items"
         if (netgame && !deathmatch)
-            callback(DEH_String("WIOBJ"), &items);
+            callback("WIOBJ", &items);
         else
-            callback(DEH_String("WIOSTI"), &items);
+            callback("WIOSTI", &items);
     } else {
-        callback(DEH_String("WIOSTI"), &items);
+        callback("WIOSTI", &items);
     }
 
     // "frgs"
-    callback(DEH_String("WIFRGS"), &frags);
+    callback("WIFRGS", &frags);
 
     // ":"
-    callback(DEH_String("WICOLON"), &colon);
+    callback("WICOLON", &colon);
 
     // "time"
-    callback(DEH_String("WITIME"), &timepatch);
+    callback("WITIME", &timepatch);
 
     // "sucks"
-    callback(DEH_String("WISUCKS"), &sucks);
+    callback("WISUCKS", &sucks);
 
     // "par"
-    callback(DEH_String("WIPAR"), &par);
+    callback("WIPAR", &par);
 
     // "killers" (vertical)
-    callback(DEH_String("WIKILRS"), &killers);
+    callback("WIKILRS", &killers);
 
     // "victims" (horiz)
-    callback(DEH_String("WIVCTMS"), &victims);
+    callback("WIVCTMS", &victims);
 
     // "total"
-    callback(DEH_String("WIMSTT"), &total);
+    callback("WIMSTT", &total);
 
     for (i = 0; i < MAXPLAYERS; i++) {
         // "1,2,3,4"
-        DEH_snprintf(name, 9, "STPB%d", i);
+        snprintf(name, 9, "STPB%d", i);
         callback(name, &p[i]);
 
         // "1,2,3,4"
-        DEH_snprintf(name, 9, "WIBP%d", i + 1);
+        snprintf(name, 9, "WIBP%d", i + 1);
         callback(name, &bp[i]);
     }
 
     // Background image
 
     if (gamemode == commercial) {
-        M_StringCopy(name, DEH_String("INTERPIC"), sizeof(name));
+        M_StringCopy(name, "INTERPIC", sizeof(name));
     } else if (gamemode == retail && wbs->epsd == 3) {
-        M_StringCopy(name, DEH_String("INTERPIC"), sizeof(name));
+        M_StringCopy(name, "INTERPIC", sizeof(name));
     } else {
-        DEH_snprintf(name, sizeof(name), "WIMAP%d", wbs->epsd);
+        snprintf(name, sizeof(name), "WIMAP%d", wbs->epsd);
     }
 
     // Draw backdrop and save to a temporary buffer
@@ -1490,10 +1472,10 @@ void WI_loadData(void)
     // them with the status bar code
 
     // your face
-    star = W_CacheLumpName(DEH_String("STFST01"), PU_STATIC);
+    star = W_CacheLumpName("STFST01", PU_STATIC);
 
     // dead face
-    bstar = W_CacheLumpName(DEH_String("STFDEAD0"), PU_STATIC);
+    bstar = W_CacheLumpName("STFDEAD0", PU_STATIC);
 }
 
 static void WI_unloadCallback(char *name, patch_t **variable)

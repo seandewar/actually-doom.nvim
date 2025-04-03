@@ -16,15 +16,12 @@
 //      Timer functions.
 //
 
-#include "i_timer.h"
-#include "doomtype.h"
-
-#include "doomgeneric.h"
-
 #include <stdarg.h>
-
 // #include <sys/time.h>
 // #include <unistd.h>
+
+#include "doomgeneric.h"
+#include "i_timer.h"
 
 //
 // I_GetTime
@@ -80,6 +77,8 @@ void I_Sleep(int ms)
 
 void I_WaitVBL(int count)
 {
+    (void)count;
+
     // I_Sleep((count * 1000) / 70);
 }
 

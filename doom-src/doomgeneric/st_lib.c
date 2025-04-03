@@ -16,23 +16,13 @@
 //      The status bar widget code.
 //
 
-#include <ctype.h>
-#include <stdio.h>
-
-#include "deh_main.h"
-#include "doomdef.h"
-
-#include "v_video.h"
-#include "z_zone.h"
-
+#include "st_lib.h"
 #include "i_swap.h"
 #include "i_system.h"
-
-#include "w_wad.h"
-
-#include "r_local.h"
-#include "st_lib.h"
 #include "st_stuff.h"
+#include "v_video.h"
+#include "w_wad.h"
+#include "z_zone.h"
 
 // in AM_map.c
 extern boolean automapactive;
@@ -45,7 +35,7 @@ patch_t *sttminus;
 
 void STlib_init(void)
 {
-    sttminus = (patch_t *)W_CacheLumpName(DEH_String("STTMINUS"), PU_STATIC);
+    sttminus = (patch_t *)W_CacheLumpName("STTMINUS", PU_STATIC);
 }
 
 // ?
@@ -66,7 +56,7 @@ void STlib_initNum(st_number_t *n, int x, int y, patch_t **pl, int *num,
 //  based on differences from the old number.
 // Note: worth the trouble?
 //
-void STlib_drawNum(st_number_t *n, boolean refresh)
+void STlib_drawNum(st_number_t *n)
 {
     int numdigits = n->width;
     int num = *n->num;
@@ -120,14 +110,12 @@ void STlib_drawNum(st_number_t *n, boolean refresh)
         V_DrawPatch(x - 8, n->y, sttminus);
 }
 
-//
-void STlib_updateNum(st_number_t *n, boolean refresh)
+void STlib_updateNum(st_number_t *n)
 {
     if (*n->on)
-        STlib_drawNum(n, refresh);
+        STlib_drawNum(n);
 }
 
-//
 void STlib_initPercent(st_percent_t *p, int x, int y, patch_t **pl, int *num,
                        boolean *on, patch_t *percent)
 {
@@ -140,7 +128,7 @@ void STlib_updatePercent(st_percent_t *per, int refresh)
     if (refresh && *per->n.on)
         V_DrawPatch(per->n.x, per->n.y, per->p);
 
-    STlib_updateNum(&per->n, refresh);
+    STlib_updateNum(&per->n);
 }
 
 void STlib_initMultIcon(st_multicon_t *i, int x, int y, patch_t **il, int *inum,

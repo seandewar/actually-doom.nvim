@@ -20,23 +20,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "deh_misc.h"
-
-#include "i_system.h"
-#include "m_bbox.h"
-#include "m_random.h"
-
-#include "doomdef.h"
-#include "m_argv.h"
-#include "m_misc.h"
-#include "p_local.h"
-
-#include "s_sound.h"
-
-// State.
 #include "doomstat.h"
+#include "i_system.h"
+#include "m_argv.h"
+#include "m_bbox.h"
+#include "m_misc.h"
+#include "m_random.h"
+#include "p_local.h"
+#include "p_spec.h"
+#include "r_main.h"
 #include "r_state.h"
-// Data.
+#include "s_sound.h"
 #include "sounds.h"
 
 // Spechit overrun magic value.
@@ -308,11 +302,7 @@ boolean PIT_CheckThing(mobj_t *thing)
             if (thing == tmthing->target)
                 return true;
 
-            // sdh: Add deh_species_infighting here.  We can override the
-            // "monsters of the same species cant hurt each other" behavior
-            // through dehacked patches
-
-            if (thing->type != MT_PLAYER && !deh_species_infighting) {
+            if (thing->type != MT_PLAYER) {
                 // Explode, but do no damage.
                 // Let players missile other players.
                 return false;

@@ -19,11 +19,7 @@
 #ifndef __W_WAD__
 #define __W_WAD__
 
-#include <stdio.h>
-
 #include "d_mode.h"
-#include "doomtype.h"
-
 #include "w_file.h"
 
 //

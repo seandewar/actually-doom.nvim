@@ -18,13 +18,10 @@
 //
 
 #include "m_random.h"
-#include "z_zone.h"
-
-#include "doomdef.h"
 #include "p_local.h"
-
-// State.
+#include "p_spec.h"
 #include "r_state.h"
+#include "z_zone.h"
 
 //
 // FIRELIGHT FLICKER

@@ -19,8 +19,8 @@
 #ifndef __STLIB__
 #define __STLIB__
 
-// We are referring to patches.
-#include "r_defs.h"
+#include "doomtype.h"
+#include "v_patch.h"
 
 //
 // Typedefs of widgets
@@ -126,7 +126,7 @@ void STlib_init(void);
 void STlib_initNum(st_number_t *n, int x, int y, patch_t **pl, int *num,
                    boolean *on, int width);
 
-void STlib_updateNum(st_number_t *n, boolean refresh);
+void STlib_updateNum(st_number_t *n);
 
 // Percent widget routines
 void STlib_initPercent(st_percent_t *p, int x, int y, patch_t **pl, int *num,

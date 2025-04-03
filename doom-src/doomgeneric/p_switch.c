@@ -17,23 +17,14 @@
 //      Switches, buttons. Two-state animation. Exits.
 //
 
-#include <stdio.h>
-
-#include "deh_main.h"
-#include "doomdef.h"
-#include "i_system.h"
-#include "p_local.h"
-
-#include "g_game.h"
-
-#include "s_sound.h"
-
-// Data.
-#include "sounds.h"
-
-// State.
 #include "doomstat.h"
+#include "g_game.h"
+#include "i_system.h"
+#include "p_spec.h"
+#include "r_data.h"
 #include "r_state.h"
+#include "s_sound.h"
+#include "sounds.h"
 
 //
 // CHANGE THE TEXTURE OF A WALL SWITCH TO ITS OPPOSITE
@@ -118,20 +109,18 @@ void P_InitSwitchList(void)
         if (alphSwitchList[i].episode <= episode) {
 #if 0 // UNUSED - debug?
             int         value;
-                        
+
             if (R_CheckTextureNumForName(alphSwitchList[i].name1) < 0)
             {
                 I_Error("Can't find switch texture '%s'!",
                         alphSwitchList[i].name1);
                 continue;
             }
-            
+
             value = R_TextureNumForName(alphSwitchList[i].name1);
 #endif
-            switchlist[index++] =
-                R_TextureNumForName(DEH_String(alphSwitchList[i].name1));
-            switchlist[index++] =
-                R_TextureNumForName(DEH_String(alphSwitchList[i].name2));
+            switchlist[index++] = R_TextureNumForName(alphSwitchList[i].name1);
+            switchlist[index++] = R_TextureNumForName(alphSwitchList[i].name2);
         }
     }
 }

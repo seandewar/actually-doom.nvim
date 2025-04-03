@@ -19,9 +19,6 @@
 #ifndef __R_DEFS__
 #define __R_DEFS__
 
-// Screenwidth.
-#include "doomdef.h"
-
 // Some more or less basic data types
 // we depend on.
 #include "m_fixed.h"
@@ -33,8 +30,6 @@
 #include "p_mobj.h"
 
 #include "i_video.h"
-
-#include "v_patch.h"
 
 // Silhouette, needed for clipping Segs (mainly)
 // and sprites representing things.

@@ -19,6 +19,9 @@
 #ifndef __R_THINGS__
 #define __R_THINGS__
 
+#include "r_defs.h"
+#include "v_patch.h"
+
 #define MAXVISSPRITES 128
 
 extern vissprite_t vissprites[MAXVISSPRITES];

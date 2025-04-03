@@ -19,7 +19,6 @@
 #ifndef __I_SYSTEM__
 #define __I_SYSTEM__
 
-#include "d_event.h"
 #include "d_ticcmd.h"
 
 typedef void (*atexit_func_t)(void);

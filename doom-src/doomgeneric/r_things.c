@@ -18,18 +18,21 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "deh_main.h"
 #include "doomdef.h"
-
+#include "doomstat.h"
 #include "i_swap.h"
 #include "i_system.h"
+#include "r_bsp.h"
+#include "r_defs.h"
+#include "r_draw.h"
+#include "r_main.h"
+#include "r_segs.h"
+#include "r_state.h"
+#include "r_things.h"
 #include "w_wad.h"
 #include "z_zone.h"
-
-#include "r_local.h"
-
-#include "doomstat.h"
 
 #define MINZ (FRACUNIT * 4)
 #define BASEYCENTER 100
@@ -178,7 +181,7 @@ void R_InitSpriteDefs(char **namelist)
     //  noting the highest frame letter.
     // Just compare 4 characters as ints
     for (i = 0; i < numsprites; i++) {
-        spritename = DEH_String(namelist[i]);
+        spritename = namelist[i];
         memset(sprtemp, -1, sizeof(sprtemp));
 
         maxframe = -1;
@@ -344,7 +347,7 @@ void R_DrawMaskedColumn(column_t *column)
 // R_DrawVisSprite
 //  mfloorclip and mceilingclip should also be set.
 //
-void R_DrawVisSprite(vissprite_t *vis, int x1, int x2)
+void R_DrawVisSprite(vissprite_t *vis)
 {
     column_t *column;
     int texturecolumn;
@@ -650,7 +653,7 @@ void R_DrawPSprite(pspdef_t *psp)
         vis->colormap = spritelights[MAXLIGHTSCALE - 1];
     }
 
-    R_DrawVisSprite(vis, vis->x1, vis->x2);
+    R_DrawVisSprite(vis);
 }
 
 //
@@ -829,7 +832,7 @@ void R_DrawSprite(vissprite_t *spr)
 
     mfloorclip = clipbot;
     mceilingclip = cliptop;
-    R_DrawVisSprite(spr, spr->x1, spr->x2);
+    R_DrawVisSprite(spr);
 }
 
 //
