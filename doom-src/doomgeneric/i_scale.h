@@ -20,6 +20,7 @@
 #define __I_SCALE__
 
 #include "doomtype.h"
+#include "i_video.h"
 
 void I_InitScale(byte *_src_buffer, byte *_dest_buffer, int _dest_pitch);
 void I_ResetScaleTables(byte *palette);

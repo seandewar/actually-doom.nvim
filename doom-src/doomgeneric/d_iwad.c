@@ -391,16 +391,19 @@ static char *CheckDirectoryHasIWAD(char *dir, char *iwadname)
     // IWAD file if the path comes from DOOMWADDIR or DOOMWADPATH.
 
     if (DirIsFile(dir, iwadname) && M_FileExists(dir)) {
-        return strdup(dir);
+        return M_StringDuplicate(dir);
     }
 
     // Construct the full path to the IWAD if it is located in
     // this directory, and check if it exists.
 
     if (!strcmp(dir, ".")) {
-        filename = strdup(iwadname);
+        filename = M_StringDuplicate(iwadname);
     } else {
         filename = M_StringJoin(dir, DIR_SEPARATOR_S, iwadname, NULL);
+    }
+    if (filename == NULL) {
+        return NULL;
     }
 
     printf("Trying IWAD file:%s\n", filename);
@@ -513,14 +516,14 @@ char *D_FindWADByName(char *name)
         // file.
 
         if (DirIsFile(iwad_dirs[i], name) && M_FileExists(iwad_dirs[i])) {
-            return strdup(iwad_dirs[i]);
+            return M_StringDuplicate(iwad_dirs[i]);
         }
 
         // Construct a string for the full path
 
         path = M_StringJoin(iwad_dirs[i], DIR_SEPARATOR_S, name, NULL);
 
-        if (M_FileExists(path)) {
+        if (path != NULL && M_FileExists(path)) {
             return path;
         }
 

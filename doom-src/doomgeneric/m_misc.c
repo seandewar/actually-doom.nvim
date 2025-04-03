@@ -272,21 +272,21 @@ char *M_StrCaseStr(char *haystack, char *needle)
 }
 
 //
-// Safe version of strdup() that checks the string was successfully
-// allocated.
+// Allocates a duplicate copy of a string, or logs an error message and returns
+// NULL if allocation failed.
 //
 
 char *M_StringDuplicate(const char *orig)
 {
-    char *result;
-
-    result = strdup(orig);
+    size_t len_with_nul = strlen(orig) + 1;
+    char *result = malloc(len_with_nul);
 
     if (result == NULL) {
-        I_Error("Failed to duplicate string (length %i)\n", strlen(orig));
+        I_Error("Failed to duplicate string (length %i)\n", len_with_nul - 1);
+        return NULL;
     }
 
-    return result;
+    return memcpy(result, orig, len_with_nul);
 }
 
 //

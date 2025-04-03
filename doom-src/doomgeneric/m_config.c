@@ -1724,7 +1724,7 @@ static void SetVariable(default_t *def, char *value)
 
     switch (def->type) {
     case DEFAULT_STRING:
-        *(char **)def->location = strdup(value);
+        *(char **)def->location = M_StringDuplicate(value);
         break;
 
     case DEFAULT_INT:
@@ -2003,7 +2003,7 @@ char *M_GetSaveGameDir(char *iwadname)
     // a savegame directory, either.
 
     if (!strcmp(configdir, "")) {
-        savegamedir = strdup("");
+        savegamedir = M_StringDuplicate("");
     } else {
         savegamedir =
             M_StringJoin(configdir, DIR_SEPARATOR_S, ".savegame/", NULL);
