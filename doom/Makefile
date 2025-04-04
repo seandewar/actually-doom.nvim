@@ -4,7 +4,7 @@ LDLIBS += -lm -lc
 
 OUTDIR := build
 
-OBJS := am_map.o doomdef.o doomstat.o dstrings.o d_event.o d_items.o d_iwad.o \
+OBJS := am_map.o doomstat.o dstrings.o d_event.o d_items.o d_iwad.o \
         d_loop.o d_main.o d_mode.o d_net.o f_finale.o f_wipe.o g_game.o \
         hu_lib.o hu_stuff.o info.o i_cdmus.o i_endoom.o i_joystick.o i_scale.o \
         i_sound.o i_system.o i_timer.o memio.o m_argv.o m_bbox.o m_cheat.o \
@@ -33,7 +33,7 @@ $(OUTDIR):
 
 $(OBJS): | $(OUTDIR)
 
-$(OUTDIR)/%.o: %.c
+$(OUTDIR)/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OUTPUT): $(OBJS)

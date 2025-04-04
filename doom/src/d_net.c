@@ -30,6 +30,9 @@
 
 ticcmd_t *netcmds;
 
+boolean net_client_connected = false;
+boolean drone = false;
+
 // Called when a player leaves the game
 
 static void PlayerQuitGame(player_t *player)

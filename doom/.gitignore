@@ -9,5 +9,6 @@
 Debug/
 Release/
 Build/
+build/
 .cache/
 compile_commands.json
