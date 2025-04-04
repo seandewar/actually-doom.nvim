@@ -396,9 +396,6 @@ static char *CheckDirectoryHasIWAD(char *dir, char *iwadname)
     } else {
         filename = M_StringJoin(dir, DIR_SEPARATOR_S, iwadname, NULL);
     }
-    if (filename == NULL) {
-        return NULL;
-    }
 
     printf("Trying IWAD file:%s\n", filename);
 

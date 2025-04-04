@@ -831,8 +831,6 @@ static void D_Endoom(void)
     endoom = W_CacheLumpName("ENDOOM", PU_STATIC);
 
     I_Endoom(endoom);
-
-    exit(0);
 }
 
 //
