@@ -17,6 +17,7 @@
 //      Thinker, Ticker.
 //
 
+#include "d_think.h"
 #include "doomstat.h"
 #include "p_local.h"
 #include "p_spec.h"
@@ -63,7 +64,7 @@ void P_AddThinker(thinker_t *thinker)
 void P_RemoveThinker(thinker_t *thinker)
 {
     // FIXME: NOP.
-    thinker->function.acv = (actionf_v)(-1);
+    thinker->function = THINKER_REMOVED;
 }
 
 //
@@ -75,14 +76,13 @@ void P_RunThinkers(void)
 
     currentthinker = thinkercap.next;
     while (currentthinker != &thinkercap) {
-        if (currentthinker->function.acv == (actionf_v)(-1)) {
+        if (currentthinker->function == THINKER_REMOVED) {
             // time to remove it
             currentthinker->next->prev = currentthinker->prev;
             currentthinker->prev->next = currentthinker->next;
             Z_Free(currentthinker);
-        } else {
-            if (currentthinker->function.acp1)
-                currentthinker->function.acp1(currentthinker);
+        } else if (currentthinker->function) {
+            currentthinker->function(currentthinker);
         }
         currentthinker = currentthinker->next;
     }

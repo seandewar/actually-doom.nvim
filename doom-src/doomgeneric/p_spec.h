@@ -128,9 +128,9 @@ typedef struct {
 #define SLOWDARK 35
 
 void P_SpawnFireFlicker(sector_t *sector);
-void T_LightFlash(lightflash_t *flash);
+void T_LightFlash(thinker_t *thinker);
 void P_SpawnLightFlash(sector_t *sector);
-void T_StrobeFlash(strobe_t *flash);
+void T_StrobeFlash(thinker_t *thinker);
 
 void P_SpawnStrobeFlash(sector_t *sector, int fastOrSlow, int inSync);
 
@@ -139,7 +139,7 @@ void EV_TurnTagLightsOff(line_t *line);
 
 void EV_LightTurnOn(line_t *line, int bright);
 
-void T_Glow(glow_t *g);
+void T_Glow(thinker_t *thinker);
 void P_SpawnGlowingLight(sector_t *sector);
 
 //
@@ -225,7 +225,7 @@ typedef struct {
 
 extern plat_t *activeplats[MAXPLATS];
 
-void T_PlatRaise(plat_t *plat);
+void T_PlatRaise(thinker_t *thinker);
 
 int EV_DoPlat(line_t *line, plattype_e type, int amount);
 
@@ -276,7 +276,7 @@ int EV_DoDoor(line_t *line, vldoor_e type);
 
 int EV_DoLockedDoor(line_t *line, vldoor_e type, mobj_t *thing);
 
-void T_VerticalDoor(vldoor_t *door);
+void T_VerticalDoor(thinker_t *thinker);
 void P_SpawnDoorCloseIn30(sector_t *sec);
 
 void P_SpawnDoorRaiseIn5Mins(sector_t *sec);
@@ -332,7 +332,7 @@ typedef struct
     char        backFrame2[9];
     char        backFrame3[9];
     char        backFrame4[9];
-    
+
 } slidename_t;
 
 
@@ -353,7 +353,7 @@ typedef struct
 #define SWAITTICS 4
 
 // how many diff. types of anims
-#define MAXSLIDEDOORS 5                            
+#define MAXSLIDEDOORS 5
 
 void P_InitSlidingDoorFrames(void);
 
@@ -402,7 +402,7 @@ extern ceiling_t *activeceilings[MAXCEILINGS];
 
 int EV_DoCeiling(line_t *line, ceiling_e type);
 
-void T_MoveCeiling(ceiling_t *ceiling);
+void T_MoveCeiling(thinker_t *thinker);
 void P_AddActiveCeiling(ceiling_t *c);
 void P_RemoveActiveCeiling(ceiling_t *c);
 int EV_CeilingCrushStop(line_t *line);
@@ -480,7 +480,7 @@ int EV_BuildStairs(line_t *line, stair_e type);
 
 int EV_DoFloor(line_t *line, floor_e floortype);
 
-void T_MoveFloor(floormove_t *floor);
+void T_MoveFloor(thinker_t *thinker);
 
 //
 // P_TELEPT

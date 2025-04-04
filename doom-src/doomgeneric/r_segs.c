@@ -387,9 +387,9 @@ void R_StoreWallRange(int start, int stop)
 
             trx = curline->v1->x - viewx;
             try = curline->v1->y - viewy;
-                        
-            gxt = FixedMul(trx,viewcos); 
-            gyt = -FixedMul(try,viewsin); 
+
+            gxt = FixedMul(trx,viewcos);
+            gyt = -FixedMul(try,viewsin);
             ds_p->scale1 = FixedDiv(projection, gxt-gyt)<<detailshift;
         }
 #endif

@@ -379,21 +379,21 @@ void P_NightmareRespawn(mobj_t *mobj)
 //
 // P_MobjThinker
 //
-void P_MobjThinker(mobj_t *mobj)
+void P_MobjThinker(thinker_t *thinker)
 {
+    mobj_t *mobj = (mobj_t *)thinker;
+
     // momentum movement
     if (mobj->momx || mobj->momy || (mobj->flags & MF_SKULLFLY)) {
         P_XYMovement(mobj);
 
-        // FIXME: decent NOP/NULL/Nil function pointer please.
-        if (mobj->thinker.function.acv == (actionf_v)(-1))
+        if (mobj->thinker.function == THINKER_REMOVED)
             return; // mobj was removed
     }
     if ((mobj->z != mobj->floorz) || mobj->momz) {
         P_ZMovement(mobj);
 
-        // FIXME: decent NOP/NULL/Nil function pointer please.
-        if (mobj->thinker.function.acv == (actionf_v)(-1))
+        if (mobj->thinker.function == THINKER_REMOVED)
             return; // mobj was removed
     }
 
@@ -477,7 +477,7 @@ mobj_t *P_SpawnMobj(fixed_t x, fixed_t y, fixed_t z, mobjtype_t type)
     else
         mobj->z = z;
 
-    mobj->thinker.function.acp1 = (actionf_p1)P_MobjThinker;
+    mobj->thinker.function = P_MobjThinker;
 
     P_AddThinker(&mobj->thinker);
 

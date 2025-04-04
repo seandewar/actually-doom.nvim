@@ -54,7 +54,7 @@ int EV_Teleport(line_t *line, int side, mobj_t *thing)
             for (thinker = thinkercap.next; thinker != &thinkercap;
                  thinker = thinker->next) {
                 // not a mobj
-                if (thinker->function.acp1 != (actionf_p1)P_MobjThinker)
+                if (thinker->function != P_MobjThinker)
                     continue;
 
                 m = (mobj_t *)thinker;

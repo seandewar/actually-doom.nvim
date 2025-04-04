@@ -427,10 +427,10 @@ void W_Profile (void)
     FILE*       f;
     int         j;
     char        name[9];
-        
-        
+
+
     for (i=0 ; i<numlumps ; i++)
-    {   
+    {
         ptr = lumpinfo[i].cache;
         if (!ptr)
         {

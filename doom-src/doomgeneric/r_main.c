@@ -381,8 +381,8 @@ fixed_t R_ScaleFromGlobalAngle(angle_t visangle)
     fixed_t             z;
     fixed_t             sinv;
     fixed_t             cosv;
-        
-    sinv = finesine[(visangle-rw_normalangle)>>ANGLETOFINESHIFT];       
+
+    sinv = finesine[(visangle-rw_normalangle)>>ANGLETOFINESHIFT];
     dist = FixedDiv (rw_distance, sinv);
     cosv = finecosine[(viewangle-visangle)>>ANGLETOFINESHIFT];
     z = abs(FixedMul (dist, cosv));
@@ -424,7 +424,7 @@ void R_InitTables(void)
     float       a;
     float       fv;
     int         t;
-    
+
     // viewangle tangent table
     for (i=0 ; i<FINEANGLES/2 ; i++)
     {
@@ -433,7 +433,7 @@ void R_InitTables(void)
         t = fv;
         finetangent[i] = t;
     }
-    
+
     // finesine table
     for (i=0 ; i<5*FINEANGLES/4 ; i++)
     {
