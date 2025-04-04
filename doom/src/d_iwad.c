@@ -609,7 +609,7 @@ const iwad_t **D_FindAllIWADs(int mask)
     const iwad_t **result;
     int result_len;
     char *filename;
-    int i;
+    size_t i;
 
     result = malloc(sizeof(iwad_t *) * (arrlen(iwads) + 1));
     result_len = 0;
@@ -664,7 +664,7 @@ char *D_SaveGameIWADName(GameMission_t gamemission)
 
 char *D_SuggestIWADName(GameMission_t mission, GameMode_t mode)
 {
-    int i;
+    size_t i;
 
     for (i = 0; i < arrlen(iwads); ++i) {
         if (iwads[i].mission == mission && iwads[i].mode == mode) {
@@ -677,7 +677,7 @@ char *D_SuggestIWADName(GameMission_t mission, GameMode_t mode)
 
 char *D_SuggestGameName(GameMission_t mission, GameMode_t mode)
 {
-    int i;
+    size_t i;
 
     for (i = 0; i < arrlen(iwads); ++i) {
         if (iwads[i].mission == mission

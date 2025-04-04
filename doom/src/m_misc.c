@@ -459,7 +459,7 @@ int M_vsnprintf(char *buf, size_t buf_len, const char *s, va_list args)
 
     // If truncated, change the final char in the buffer to a \0.
     // A negative result indicates a truncated buffer on Windows.
-    if (result < 0 || result >= buf_len) {
+    if (result < 0 || (size_t)result >= buf_len) {
         buf[buf_len - 1] = '\0';
         result = buf_len - 1;
     }

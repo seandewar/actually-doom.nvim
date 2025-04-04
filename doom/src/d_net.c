@@ -88,7 +88,7 @@ static loop_interface_t doom_loop_interface = {D_ProcessEvents, G_BuildTiccmd,
 
 static void LoadGameSettings(net_gamesettings_t *settings)
 {
-    unsigned int i;
+    int i;
 
     deathmatch = settings->deathmatch;
     startepisode = settings->episode;

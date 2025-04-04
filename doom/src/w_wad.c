@@ -75,7 +75,7 @@ unsigned int W_LumpNameHash(const char *s)
 }
 
 // Increase the size of the lumpinfo[] array to the specified size.
-static void ExtendLumpInfo(int newnumlumps)
+static void ExtendLumpInfo(unsigned int newnumlumps)
 {
     lumpinfo_t *newlumpinfo;
     unsigned int i;
@@ -499,7 +499,7 @@ static const struct {
 
 void W_CheckCorrectIWAD(GameMission_t mission)
 {
-    int i;
+    size_t i;
     int lumpnum;
 
     for (i = 0; i < arrlen(unique_lumps); ++i) {

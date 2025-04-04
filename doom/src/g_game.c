@@ -259,7 +259,7 @@ static int G_NextWeapon(int direction)
         weapon = players[consoleplayer].pendingweapon;
     }
 
-    for (i = 0; i < arrlen(weapon_order_table); ++i) {
+    for (i = 0; (size_t)i < arrlen(weapon_order_table); ++i) {
         if (weapon_order_table[i].weapon == weapon) {
             break;
         }
@@ -394,7 +394,7 @@ void G_BuildTiccmd(ticcmd_t *cmd, int maketic)
     } else {
         // Check weapon keys.
 
-        for (i = 0; i < arrlen(weapon_keys); ++i) {
+        for (i = 0; (size_t)i < arrlen(weapon_keys); ++i) {
             int key = *weapon_keys[i];
 
             if (gamekeydown[key]) {

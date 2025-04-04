@@ -128,7 +128,8 @@ void cmap_to_rgb565(uint16_t *out, uint8_t *in, int in_pixels)
 
 void cmap_to_fb(uint8_t *out, uint8_t *in, int in_pixels)
 {
-    int i, j, k;
+    int i, k;
+    uint32_t j;
     struct color c;
     uint32_t pix;
     uint16_t r, g, b;
@@ -203,7 +204,7 @@ void I_InitGraphics(void)
         printf("I_InitGraphics: Scaling factor: %d\n", fb_scaling);
     } else {
         fb_scaling = s_Fb.xres / SCREENWIDTH;
-        if (s_Fb.yres / SCREENHEIGHT < fb_scaling)
+        if (s_Fb.yres / SCREENHEIGHT < (uint32_t)fb_scaling)
             fb_scaling = s_Fb.yres / SCREENHEIGHT;
         printf("I_InitGraphics: Auto-scaling factor: %d\n", fb_scaling);
     }

@@ -548,7 +548,7 @@ void D_StartTitle(void)
 
 static void SetMissionForPackName(char *pack_name)
 {
-    int i;
+    size_t i;
     static const struct {
         char *name;
         int mission;
