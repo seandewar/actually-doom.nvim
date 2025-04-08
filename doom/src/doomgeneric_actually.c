@@ -23,8 +23,8 @@ enum {
     // AMSG_INIT, resx: u16, resy: u16
     AMSG_INIT = 0,
 
-    // #ifdef CMAP256: AMSG_FRAME, pixels: u32[resx * resy]
-    // #else:          AMSG_FRAME, pixels:  u8[resx * resy]
+    // #ifdef CMAP256: AMSG_FRAME, pixels:  u8[resx * resy]
+    // #else:          AMSG_FRAME, pixels: u32[resx * resy]
     AMSG_FRAME = 1,
 
     // AMSG_SET_TITLE, title: String
@@ -61,7 +61,7 @@ static void CommFlush(void)
 
         ssize_t ret = send(comm_sock_fd, comm_buf.data + sent, send_len, 0);
         if (ret == -1 && errno != EINTR) {
-            I_Error("[actually-doom.nvim] Failed to send %zu byte(s) to "
+            I_Error("[actually-doom] Failed to send %zu byte(s) to "
                     "communications socket: %s",
                     send_len, strerror(errno));
         }
@@ -92,7 +92,7 @@ static void CommWrite16(uint16_t v)
     comm_buf.data[comm_buf.len++] = (v >> 8) & 0xff;
 }
 
-#ifdef CMAP256
+#ifndef CMAP256
 static void CommWrite32(uint32_t v)
 {
     assert(COMM_BUF_CAP >= 4);
@@ -136,12 +136,18 @@ static void CommWriteString(const char *s)
 
 int main(int argc, char **argv)
 {
+    // Set buffering to what's usually the default when run within a terminal.
+    // Return values ignored; if this fails then whatever, though console output
+    // in other applications (like Nvim) may look confusing.
+    setvbuf(stdout, NULL, _IOLBF, 0); // Line buffering for stdout.
+    setvbuf(stderr, NULL, _IONBF, 0); // No buffering for stderr.
+
     struct sigaction sa = {.sa_handler = SigintHandler};
     if (sigemptyset(&sa.sa_mask) == -1 || sigaction(SIGINT, &sa, NULL) == -1) {
-        fprintf(stderr,
-                "[actually-doom.nvim] Warning: Failed to install SIGINT "
-                "handler: %s\n",
-                strerror(errno));
+        fprintf(
+            stderr,
+            "[actually-doom] Warning: Failed to install SIGINT handler: %s\n",
+            strerror(errno));
     }
 
     doomgeneric_Create(argc, argv);
@@ -158,16 +164,16 @@ int main(int argc, char **argv)
 static void CloseListenSocket(void)
 {
     if (listen_sock_fd >= 0 && close(listen_sock_fd) == -1) {
-        fprintf(stderr,
-                "[actually-doom.nvim] Warning: Failed to close listener "
-                "socket: %s\n",
-                strerror(errno));
+        fprintf(
+            stderr,
+            "[actually-doom] Warning: Failed to close listener socket: %s\n",
+            strerror(errno));
     }
 
     if (listen_sock_path && unlink(listen_sock_path) == -1) {
         fprintf(stderr,
-                "[actually-doom.nvim] Warning: Failed to delete listener "
-                "socket file: %s\n",
+                "[actually-doom] Warning: Failed to delete listener socket "
+                "file: %s\n",
                 strerror(errno));
     }
 
@@ -181,7 +187,7 @@ static void CloseSockets(void)
 
     if (comm_sock_fd >= 0 && close(comm_sock_fd) == -1) {
         fprintf(stderr,
-                "[actually-doom.nvim] Warning: Failed to close communications "
+                "[actually-doom] Warning: Failed to close communications "
                 "socket: %s\n",
                 strerror(errno));
     }
@@ -201,7 +207,7 @@ static uint32_t GetClockMs(void)
 #endif
             &tp)
         == -1) {
-        I_Error("[actually-doom.nvim] Unexpected error while reading clock: %s",
+        I_Error("[actually-doom] Unexpected error while reading clock: %s",
                 strerror(errno));
     }
 
@@ -212,54 +218,54 @@ void DG_Init(void)
 {
     int p = M_CheckParmWithArgs("-listen", 1);
     if (p == 0)
-        I_Error("[actually-doom.nvim] \"-listen <socket_path>\" argument "
-                "required.");
+        I_Error("[actually-doom] \"-listen <socket_path>\" argument required");
 
-    listen_sock_path = myargv[p + 1];
-    size_t listen_sock_path_len = strlen(listen_sock_path);
+    const char *sock_path = myargv[p + 1];
+    size_t sock_path_len = strlen(sock_path);
     struct sockaddr_un listen_sock_addr = {.sun_family = AF_UNIX};
 
-    if (listen_sock_path_len + 1 > sizeof listen_sock_addr.sun_path) {
-        I_Error("[actually-doom.nvim] Listener socket path too long; max: %zu, "
-                "size: %zu.",
-                (sizeof listen_sock_addr.sun_path) - 1, listen_sock_path_len);
+    if (sock_path_len + 1 > sizeof listen_sock_addr.sun_path) {
+        I_Error("[actually-doom] Listener socket path too long; max: %zu, "
+                "size: %zu",
+                (sizeof listen_sock_addr.sun_path) - 1, sock_path_len);
     }
 
     if ((listen_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        I_Error("[actually-doom.nvim] Failed to create listener socket: %s",
+        I_Error("[actually-doom] Failed to create listener socket: %s",
                 strerror(errno));
     }
 
     I_AtExit(CloseSockets, true);
     // Bounds already checked above.
-    strcpy(listen_sock_addr.sun_path, listen_sock_path);
+    strcpy(listen_sock_addr.sun_path, sock_path);
 
     if (bind(listen_sock_fd, (struct sockaddr *)&listen_sock_addr,
              sizeof listen_sock_addr)
         == -1) {
-        I_Error("[actually-doom.nvim] Failed to bind listener socket to path "
-                "\"%s\": %s",
-                listen_sock_path, strerror(errno));
+        I_Error(
+            "[actually-doom] Failed to bind listener socket to path \"%s\": %s",
+            sock_path, strerror(errno));
     }
 
+    // Bound now, so this path has our socket file.
+    listen_sock_path = sock_path;
+
     if (listen(listen_sock_fd, 2) != 0) {
-        I_Error("[actually-doom.nvim] Failed to listen on actually-doom.nvim "
-                "socket: %s",
+        I_Error("[actually-doom] Failed to listen on actually-doom socket: %s",
                 strerror(errno));
     }
 
-    printf(
-        "[actually-doom.nvim] Listening for connections on socket \"%s\"...\n",
-        listen_sock_path);
+    printf("[actually-doom] Listening for connections on socket \"%s\"...\n",
+           sock_path);
 
     while ((comm_sock_fd = accept(listen_sock_fd, NULL, NULL)) == -1) {
         switch (errno) {
         case ECONNABORTED:
         case EPERM:
-            fprintf(stderr,
-                    "[actually-doom.nvim] Warning: Failed to accept a "
-                    "connection: %s\n",
-                    strerror(errno));
+            fprintf(
+                stderr,
+                "[actually-doom] Warning: Failed to accept a connection: %s\n",
+                strerror(errno));
             break;
 
         case EINTR:
@@ -268,7 +274,7 @@ void DG_Init(void)
             break;
 
         default:
-            I_Error("[actually-doom.nvim] Unexpected error while listening for "
+            I_Error("[actually-doom] Unexpected error while listening for "
                     "connections: %s",
                     strerror(errno));
         }
@@ -278,10 +284,9 @@ void DG_Init(void)
     if (getsockopt(comm_sock_fd, SOL_SOCKET, SO_PEERCRED, &creds,
                    &(socklen_t){sizeof creds})
         == 0) {
-        printf("[actually-doom.nvim] PID %jd has connected.\n",
-               (intmax_t)creds.pid);
+        printf("[actually-doom] PID %jd has connected\n", (intmax_t)creds.pid);
     } else {
-        printf("[actually-doom.nvim] A client has connected.\n");
+        printf("[actually-doom] A client has connected\n");
     }
 
     CloseListenSocket();
@@ -297,13 +302,13 @@ void DG_DrawFrame(void)
     CommWrite8(AMSG_FRAME);
 
 #ifdef CMAP256
-    // TODO: possibly slow; it may do a flush check for each u32 (also we're
-    // manually splitting the bytes), but CMAP256 currently isn't actually used.
-    for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
-        CommWrite32(DG_ScreenBuffer[i]);
-#else
     CommWriteBytes((char *)DG_ScreenBuffer,
                    DOOMGENERIC_RESX * DOOMGENERIC_RESY);
+#else
+    // TODO: possibly slow; it may do a flush check for each u32 (also we're
+    // manually splitting the bytes)
+    for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
+        CommWrite32(DG_ScreenBuffer[i]);
 #endif
 }
 
@@ -311,7 +316,7 @@ void DG_SleepMs(uint32_t ms)
 {
     if (nanosleep(&(struct timespec){.tv_nsec = ms * NS_PER_MS}, NULL) == -1
         && (errno != EINTR || !interrupted)) {
-        I_Error("[actually-doom.nvim] Unexpected error while sleeping: %s",
+        I_Error("[actually-doom] Unexpected error while sleeping: %s",
                 strerror(errno));
     }
 }

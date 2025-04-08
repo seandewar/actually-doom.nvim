@@ -72,11 +72,7 @@ static unsigned char GetTypedChar(unsigned char key)
     // Is shift held down?  If so, perform a translation.
 
     if (shiftdown > 0) {
-        if (key >= 0 && key < arrlen(shiftxform)) {
-            key = shiftxform[key];
-        } else {
-            key = 0;
-        }
+        key = key < arrlen(shiftxform) ? shiftxform[key] : 0;
     }
 
     return key;

@@ -1327,7 +1327,7 @@ static void WI_loadUnloadData(load_callback_t callback)
 
     if (gamemode == commercial) {
         for (i = 0; i < NUMCMAPS; i++) {
-            snprintf(name, 9, "CWILV%2.2d", i);
+            snprintf(name, 9, "CWILV%.2d", i);
             callback(name, &lnames[i]);
         }
     } else {

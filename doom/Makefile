@@ -1,5 +1,5 @@
 CFLAGS += -std=c99 -Wall -Wextra -Wpedantic -g \
-          -D_POSIX_C_SOURCE=199309 -D_GNU_SOURCE
+          -D_POSIX_C_SOURCE=199309 -D_GNU_SOURCE -DCMAP256
 LDFLAGS += -Wl,--gc-sections
 LDLIBS += -lm -lc
 
