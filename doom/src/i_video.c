@@ -28,8 +28,6 @@
 #include "tables.h"
 #include "z_zone.h"
 
-// #define CMAP256
-
 struct FB_BitField {
     uint32_t offset; /* beginning of bitfield   */
     uint32_t length; /* length of bitfield              */

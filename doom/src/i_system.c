@@ -277,7 +277,7 @@ void I_Error(char *error, ...)
         entry = entry->next;
     }
 
-    abort();
+    exit(1);
 }
 
 //
