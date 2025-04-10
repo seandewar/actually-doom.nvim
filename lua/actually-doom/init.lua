@@ -194,6 +194,8 @@ local function init_process(doom, sock_path)
     fs.joinpath(script_dir, "../../doom/build/doomgeneric_actually"),
     "-listen",
     sock_path,
+    "-iwad",
+    fs.joinpath(script_dir, "../../doom/DOOM1.WAD"),
   }, {
     stdout = new_on_out_func(),
     stderr = new_on_out_func "WarningMsg",
@@ -205,6 +207,16 @@ local function init_process(doom, sock_path)
   doom.process = sys_rv
 
   doom.console:plugin_print(("DOOM started as PID %d\n\n"):format(sys_rv.pid))
+end
+
+--- @param doom Doom
+--- @param err nil|string
+--- @param data string|nil
+local function on_sock_read(doom, err, data)
+  if err then
+    error(err)
+  end
+  doom.console:print(data or "")
 end
 
 --- @param doom Doom
@@ -220,10 +232,10 @@ local function init_connection(doom, sock_path)
     if err then
       tries_left = tries_left - 1
       doom.console:plugin_print(
-        ("Failed to connect to the DOOM process: %s (%d attempt(s) left)\n"):format(
-          err,
-          tries_left
-        ),
+        (
+          "Failed to connect to the DOOM process: %s "
+          .. "(%d attempt(s) left)\n"
+        ):format(err, tries_left),
         "WarningMsg"
       )
       if tries_left <= 0 then
@@ -240,19 +252,25 @@ local function init_connection(doom, sock_path)
     end
 
     doom.console:plugin_print "Connected to the DOOM process\n"
-    -- TODO
+    assert(doom.sock:read_start(doom:close_on_err_wrap(function(...)
+      return on_sock_read(doom, ...)
+    end)))
   end
 
   doom.connect_timer = assert(uv.new_timer())
   --- @param ms integer
   schedule_connect = function(ms)
+    -- Forward the libuv errors from trying to schedule the operations so that
+    -- they count as a failed connection attempt.
     local _, err = doom.connect_timer:start(ms, 0, function()
-      local request, err = doom.sock:connect(sock_path, connect_cb)
+      local request, err =
+        doom.sock:connect(sock_path, doom:close_on_err_wrap(connect_cb))
       if err then
         connect_cb(err) -- Forward the error.
       end
       doom.connect_request = request
     end)
+
     if err then
       connect_cb(err) -- Forward the error.
     end
@@ -274,13 +292,13 @@ function Doom.run()
   )
   local ok, rv = pcall(init_process, doom, sock_path)
   if not ok then
+    -- Error starting DOOM. Not using close_on_err here, as we don't want a
+    -- verbose emsg, and we close the console as we don't expect much there yet.
     doom:close(true)
     error(rv, 0)
   end
 
-  -- DOOM process running at this point, so don't close the console when
-  -- cleaning up if something goes awry, as there might be important messages.
-  ok, rv = pcall(function()
+  doom:close_on_err(function()
     doom.console:set_buf_name(
       ("actually-doom://console//%d"):format(doom.process.pid)
     )
@@ -291,10 +309,6 @@ function Doom.run()
 
     init_connection(doom, sock_path)
   end)
-  if not ok then
-    doom:close()
-    error(rv, 0)
-  end
 
   return doom
 end
@@ -325,11 +339,55 @@ function Doom:close(close_console)
   end
 end
 
+--- Call `f`, but print to the console and call [`Doom.close`](lua://Doom.close)
+--- upon an unhandled error and re-throw it.
+---
+--- This should only be used when errors are unexpected, like logic errors.
+---
+--- @param f function
+--- @param ... any arguments to pass to `f`
+--- @return any ...
+function Doom:close_on_err(f, ...)
+  --- Allows us to return multiple return values from `f`.
+  --- @return integer, table
+  local function pack(...)
+    return select("#", ...), { ... }
+  end
+
+  local args = { ... }
+  local nargs = select("#", ...) -- Can't use #args; args may have nils.
+  local ok, nrvs_or_err, rvs = xpcall(function()
+    return pack(f(unpack(args, 1, nargs)))
+  end, debug.traceback)
+
+  if not ok then
+    self.console:plugin_print(
+      ("Quitting after unexpected error: %s\n"):format(nrvs_or_err),
+      "ErrorMsg"
+    )
+    self:close()
+    error(nrvs_or_err, 0) -- The double traceback is unfortunate.
+  end
+  return unpack(rvs, 1, nrvs_or_err)
+end
+
+--- @see Doom.close_on_err
+--- @param f function
+--- @return function
+--- @nodiscard
+function Doom:close_on_err_wrap(f)
+  return function(...)
+    return self:close_on_err(f, ...)
+  end
+end
+
+--- @return Doom
 function M.play()
   local ok, rv = pcall(Doom.run)
   if not ok then
     api.nvim_echo({ { rv } }, true, { err = true })
   end
+  return rv
 end
 
 return M
