@@ -38,7 +38,7 @@ function Console.new()
   api.nvim_set_option_value("modifiable", false, { buf = buf })
 
   local save_curwin = api.nvim_get_current_win()
-  vim.cmd(("tab %d sbuffer"):format(buf))
+  api.nvim_command(("tab %d sbuffer"):format(buf))
   if api.nvim_win_is_valid(save_curwin) then
     -- We'll choose when to enter the new tabpage.
     api.nvim_set_current_win(save_curwin)
@@ -158,19 +158,155 @@ function Console:plugin_print(text, hl)
   return self:print("[actually-doom.nvim] " .. text, hl or "Special")
 end
 
+--- @class Screen
+--- @field resx integer
+--- @field resy integer
+--- @field cmap256 boolean
+--- @field pixels string?
+--- @field pixels_len integer
+--- @field redraw_pending boolean?
+---
+--- @field closed boolean?
+--- @field buf integer?
+--- @field win integer?
+local Screen = {}
+
+--- @param resx integer
+--- @param resy integer
+--- @param cmap256 boolean
+--- @param buf_name string?
+--- @return Screen
+function Screen.new(resx, resy, cmap256, buf_name)
+  local screen = {
+    resx = resx,
+    resy = resy,
+    cmap256 = cmap256,
+    pixels_len = resx * resy * (cmap256 and 1 or 4),
+  }
+
+  local function create_ui()
+    -- It's possible we were closed beforehand if this operation was scheduled.
+    if screen.closed then
+      return
+    end
+
+    screen.buf = api.nvim_create_buf(true, true)
+    if buf_name then
+      api.nvim_buf_set_name(screen.buf, buf_name)
+    end
+
+    local buf_lines = { (" "):rep(resx) }
+    for y = 1, resy do
+      buf_lines[y + 1] = buf_lines[1]
+    end
+    api.nvim_buf_set_lines(screen.buf, 0, -1, true, buf_lines)
+    api.nvim_set_option_value("modifiable", false, { buf = screen.buf })
+
+    local screen_width = api.nvim_get_option_value("columns", {})
+    local screen_height = api.nvim_get_option_value("lines", {})
+      - api.nvim_get_option_value("cmdheight", {})
+
+    screen.win = api.nvim_open_win(screen.buf, true, {
+      relative = "editor",
+      width = resx,
+      height = resy,
+      row = (screen_height - resy) / 2,
+      col = (screen_width - resx) / 2,
+      style = "minimal",
+      border = "rounded",
+      title = "Doom",
+      title_pos = "center",
+    })
+    api.nvim_set_option_value(
+      "wrap",
+      false,
+      { scope = "local", win = screen.win }
+    )
+
+    api.nvim_command "stopinsert"
+  end
+  -- If in a fast context, we can't create the UI immediately.
+  if vim.in_fast_event() then
+    vim.schedule(create_ui)
+  else
+    create_ui()
+  end
+
+  return setmetatable(screen, { __index = Screen })
+end
+
+function Screen:close()
+  self.closed = true
+  if vim.in_fast_event() then
+    vim.schedule(function()
+      self:close()
+    end)
+    return
+  end
+
+  if self.buf and api.nvim_buf_is_valid(self.buf) then
+    api.nvim_buf_delete(self.buf, { force = true })
+  end
+end
+
+function Screen:redraw()
+  if vim.in_fast_event() or not self.buf then
+    if not self.redraw_pending or not self.buf then
+      self.redraw_pending = true
+      vim.schedule(function()
+        self:redraw()
+      end)
+    end
+    return
+  end
+  self.redraw_pending = false
+
+  local i = 1
+  for y = 1, self.resy do
+    for x = 1, self.resx do
+      api.nvim_buf_set_extmark(self.buf, ns, y - 1, x - 1, {
+        -- Assumes extmark IDs are assigned sequentially, starting from 1.
+        -- If this doesn't hold true in the future, we'll need a lookup table.
+        id = i,
+        end_col = x,
+        hl_group = self.pixels:byte(i),
+        undo_restore = false,
+      })
+      i = i + 1
+    end
+  end
+end
+
+--- @param pixels string?
+function Screen:set_pixels(pixels)
+  self.pixels = pixels
+  self:redraw()
+end
+
+--- @param title string
+function Screen:set_title(title)
+  if vim.in_fast_event() or not self.win then
+    vim.schedule(function()
+      self:set_title(title)
+    end)
+    return
+  end
+
+  if api.nvim_win_is_valid(self.win) then
+    api.nvim_win_set_config(self.win, { title = title })
+  end
+end
+
 --- @class Doom
 --- @field console Console
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
 --- @field closed boolean?
+--- @field recv_buf StrBuf?
+--- @field screen Screen?
 ---
 --- @field connect_timer uv.uv_timer_t?
 --- @field connect_request uv.uv_connect_t?
----
---- @field recv_buf StrBuf?
---- @field resx integer?
---- @field resy integer?
---- @field cmap256 boolean?
 local Doom = {}
 
 --- @param doom Doom
@@ -260,9 +396,12 @@ local function recv_msg_loop(doom)
   local resy = read16()
   local cmap256 = read_bool()
   doom.console:plugin_print(
-    (
-      "AMSG_INIT: proto_version=%d resx=%d resy=%d cmap256=%s\n"
-    ):format(proto_version, resx, resy, tostring(cmap256)),
+    ("AMSG_INIT: proto_version=%d resx=%d resy=%d cmap256=%s\n"):format(
+      proto_version,
+      resx,
+      resy,
+      tostring(cmap256)
+    ),
     "Comment"
   )
 
@@ -277,20 +416,18 @@ local function recv_msg_loop(doom)
     doom:close()
     return
   end
-  doom.resx = resx
-  doom.resy = resy
-  doom.cmap256 = cmap256
+  doom.screen = Screen.new(
+    resx,
+    resy,
+    cmap256,
+    ("actually-doom://screen//%d"):format(doom.process.pid)
+  )
 
   --- @type table<integer, fun()>
   local msg_handlers = {
     -- AMSG_FRAME
     [0] = function()
-      local n = doom.resx * doom.resy * (doom.cmap256 and 1 or 4)
-      read_bytes(n)
-      doom.console:plugin_print(
-        ("AMSG_FRAME: size=%d bytes\n"):format(n),
-        "Comment"
-      )
+      doom.screen:set_pixels(read_bytes(doom.screen.pixels_len))
     end,
 
     -- AMSG_SET_TITLE
@@ -300,6 +437,7 @@ local function recv_msg_loop(doom)
         ('AMSG_SET_TITLE: title="%s"\n'):format(title),
         "Comment"
       )
+      doom.screen:set_title(title)
     end,
   }
 
@@ -366,9 +504,11 @@ local function init_connection(doom, sock_path)
         )
         doom:close()
         return
+      elseif not data then
+        return -- No error, but reached EOF.
       end
 
-      doom.recv_buf:put(assert(data))
+      doom.recv_buf:put(data)
       assert(coroutine.resume(recv_co))
     end)))
   end
@@ -449,6 +589,9 @@ function Doom:close(close_console)
   end
   if self.process then
     self.process:kill "sigterm" -- Try a clean shutdown.
+  end
+  if self.screen then
+    self.screen:close()
   end
   if close_console and self.console then
     self.console:close()
