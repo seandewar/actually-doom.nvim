@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -31,6 +32,12 @@ enum {
     AMSG_SET_TITLE = 1,
 };
 
+// Incoming message types from the client. Same properties as above.
+enum {
+    // CMSG_WANT_FRAME (no payload)
+    CMSG_WANT_FRAME = 0,
+};
+
 static const char *listen_sock_path;
 static int listen_sock_fd = -1;
 static int comm_sock_fd = -1;
@@ -44,6 +51,8 @@ static struct {
 
 static uint32_t clock_start_ms;
 static volatile sig_atomic_t interrupted;
+
+static boolean client_wants_frame;
 
 static void SigintHandler(int signum)
 {
@@ -60,10 +69,25 @@ static void CommFlush(void)
         size_t send_len = comm_buf.len - sent;
 
         ssize_t ret = send(comm_sock_fd, comm_buf.data + sent, send_len, 0);
-        if (ret == -1 && errno != EINTR) {
-            I_Error("[actually-doom] Failed to send %zu byte(s) to "
-                    "communications socket: %s",
-                    send_len, strerror(errno));
+        if (ret == -1) {
+            switch (errno) {
+            case EINTR:
+                break; // Do nothing.
+
+            case ECONNRESET:
+            case EPIPE:
+                fprintf(stderr,
+                        "[actually-doom] Communications connection was closed; "
+                        "quitting: %s\n",
+                        strerror(errno));
+                I_Quit(); // noreturn
+                break;
+
+            default:
+                I_Error("[actually-doom] Failed to send %zu byte(s) to "
+                        "communications socket: %s",
+                        send_len, strerror(errno));
+            }
         }
 
         if (ret > 0)
@@ -143,6 +167,48 @@ static void CommWriteString(const char *s)
     CommWriteBytes(s, len);
 }
 
+static void HandleReceivedMsgs(void)
+{
+    struct pollfd pfd = {.fd = comm_sock_fd, .events = POLLIN};
+    for (int poll_ret; (poll_ret = poll(&pfd, 1, 0)) != 0;) {
+        if (poll_ret == -1 && errno != EINTR) {
+            I_Error("[actually-doom] Unexpected error while polling "
+                    "communications socket for incoming data: %s",
+                    strerror(errno));
+        }
+
+        char buf[1024];
+        ssize_t read_ret = read(comm_sock_fd, buf, sizeof buf);
+        if (read_ret == 0) {
+            fprintf(
+                stderr,
+                "[actually-doom] EOF while reading from communications socket; "
+                "quitting\n");
+            I_Quit();
+        } else if (read_ret < 0) {
+            if (errno == EINTR)
+                return;
+
+            I_Error("[actually-doom] Unexpected error while reading from "
+                    "communications socket: %s",
+                    strerror(errno));
+        }
+
+        // Only incoming message type implemented right now is CMSG_WANT_FRAME,
+        // which has no payload, so we can just check for that.
+        for (size_t i = 0; i < (size_t)read_ret; ++i) {
+            if (buf[i] != CMSG_WANT_FRAME) {
+                fprintf(stderr,
+                        "[actually-doom] Received unexpected message type %d "
+                        "from client; quitting\n",
+                        buf[i]);
+                I_Quit();
+            }
+        }
+        client_wants_frame = true;
+    }
+}
+
 int main(int argc, char **argv)
 {
     // Set buffering to what's usually the default when run within a terminal.
@@ -163,6 +229,8 @@ int main(int argc, char **argv)
 
     while (!interrupted) {
         CommFlush();
+        HandleReceivedMsgs();
+
         doomgeneric_Tick();
     }
 
@@ -309,12 +377,17 @@ void DG_Init(void)
 
 void DG_DrawFrame(void)
 {
+    if (!client_wants_frame)
+        return;
+
     CommWrite8(AMSG_FRAME);
 
     // TODO: possibly slow; it may do a flush check for each u24 (also we're
     // manually splitting the bytes)
     for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
         CommWrite24(DG_ScreenBuffer[i]);
+
+    client_wants_frame = false;
 }
 
 void DG_SleepMs(uint32_t ms)

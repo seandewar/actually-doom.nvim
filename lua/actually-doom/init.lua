@@ -176,11 +176,10 @@ local Screen = {}
 
 --- @param resx integer
 --- @param resy integer
---- @param width integer?
---- @param height integer?
+--- @param on_input fun(_: string, term: integer, buf: integer, data: string)?
 --- @param buf_name string?
 --- @return Screen
-function Screen.new(resx, resy, width, height, buf_name)
+function Screen.new(resx, resy, on_input, buf_name)
   local screen = setmetatable({
     resx = resx,
     resy = resy,
@@ -199,7 +198,7 @@ function Screen.new(resx, resy, width, height, buf_name)
       api.nvim_buf_set_name(screen.buf, buf_name)
     end
     screen.chan = api.nvim_open_term(screen.buf, {
-      on_input = nil, -- TODO
+      on_input = on_input,
       force_crlf = false,
     })
     api.nvim_chan_send(screen.chan, "\27[?25l") -- Hide the cursor.
@@ -209,8 +208,8 @@ function Screen.new(resx, resy, width, height, buf_name)
       - api.nvim_get_option_value("cmdheight", {})
 
     -- Minus 2 for the borders.
-    screen.width = math.max(1, math.floor(width or (screen_width - 2)))
-    screen.height = math.max(1, math.floor(height or (screen_height - 2)))
+    screen.width = math.max(1, math.floor(screen_width - 2))
+    screen.height = math.max(1, math.floor(screen_height - 2))
     api.nvim_set_option_value("scrollback", screen.height, { buf = screen.buf })
 
     screen.win = api.nvim_open_win(screen.buf, true, {
@@ -446,12 +445,27 @@ end
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
 --- @field closed boolean?
---- @field recv_buf StrBuf?
 --- @field screen Screen?
 ---
 --- @field connect_timer uv.uv_timer_t?
 --- @field connect_request uv.uv_connect_t?
 local Doom = {}
+
+function Doom:request_frame()
+  -- TODO: Is it possible for this to fail immediately from an error
+  -- communicating rather than some unexpected error?
+  -- TODO: maybe make this send callback more conveient to pass around
+  --- @param err nil|string
+  assert(self.sock:write("\0", function(err)
+    if err then
+      self.console:plugin_print(
+        ("Send error; quitting: %s\n"):format(err),
+        "ErrorMsg"
+      )
+      self:close()
+    end
+  end)) -- CMSG_WANT_FRAME
+end
 
 --- @param doom Doom
 --- @param sock_path string
@@ -502,14 +516,23 @@ local function init_process(doom, sock_path)
 end
 
 --- @param doom Doom
-local function recv_msg_loop(doom)
+--- @param chan integer
+--- @param buf integer
+--- @param data string
+local function input_cb(doom, _, chan, buf, data)
+  -- TODO
+end
+
+--- @param doom Doom
+--- @param buf StrBuf
+local function recv_msg_loop(doom, buf)
   --- @param n integer
   --- @return string
   local function read_bytes(n)
-    while n > #doom.recv_buf do
+    while n > #buf do
       coroutine.yield()
     end
-    return doom.recv_buf:get(n)
+    return buf:get(n)
   end
 
   --- @return integer
@@ -554,20 +577,23 @@ local function recv_msg_loop(doom)
     doom:close()
     return
   end
+
   doom.screen = Screen.new(
     resx,
     resy,
-    nil,
-    nil,
+    doom:close_on_err_wrap(function(...)
+      return input_cb(doom, ...)
+    end),
     ("actually-doom://screen//%d"):format(doom.process.pid)
   )
+  doom:request_frame()
 
   --- @type table<integer, fun()>
   local msg_handlers = {
     -- AMSG_FRAME
     [0] = function()
-      -- TODO: we should request frames instead so we don't get overwhelmed
       doom.screen:set_pixels(read_bytes(doom.screen.pixels_len))
+      doom:request_frame()
     end,
 
     -- AMSG_SET_TITLE
@@ -630,9 +656,10 @@ local function init_connection(doom, sock_path)
     end
 
     doom.console:plugin_print "Connected to the DOOM process\n"
-    doom.recv_buf = StrBuf.new(1024)
+    local recv_buf = StrBuf.new(1024)
     local recv_co = coroutine.create(recv_msg_loop)
-    assert(coroutine.resume(recv_co, doom)) -- Pass the initial Doom argument.
+    -- Pass the initial arguments.
+    assert(coroutine.resume(recv_co, doom, recv_buf))
 
     --- @param read_err nil|string
     --- @param data string|nil
@@ -648,7 +675,7 @@ local function init_connection(doom, sock_path)
         return -- No error, but reached EOF.
       end
 
-      doom.recv_buf:put(data)
+      recv_buf:put(data)
       assert(coroutine.resume(recv_co))
     end)))
   end
