@@ -161,7 +161,6 @@ end
 --- @class Screen
 --- @field resx integer
 --- @field resy integer
---- @field cmap256 boolean
 --- @field pixels string?
 --- @field pixels_len integer
 --- @field redraw_pending boolean?
@@ -169,20 +168,23 @@ end
 --- @field closed boolean?
 --- @field buf integer?
 --- @field win integer?
+--- @field chan integer?
+--- @field width integer?
+--- @field height integer?
 local Screen = {}
 
 --- @param resx integer
 --- @param resy integer
---- @param cmap256 boolean
+--- @param width integer?
+--- @param height integer?
 --- @param buf_name string?
 --- @return Screen
-function Screen.new(resx, resy, cmap256, buf_name)
-  local screen = {
+function Screen.new(resx, resy, width, height, buf_name)
+  local screen = setmetatable({
     resx = resx,
     resy = resy,
-    cmap256 = cmap256,
-    pixels_len = resx * resy * (cmap256 and 1 or 4),
-  }
+  }, { __index = Screen })
+  screen.pixels_len = screen:pixel_index(resx, resy - 1)
 
   local function create_ui()
     -- It's possible we were closed beforehand if this operation was scheduled.
@@ -194,24 +196,27 @@ function Screen.new(resx, resy, cmap256, buf_name)
     if buf_name then
       api.nvim_buf_set_name(screen.buf, buf_name)
     end
-
-    local buf_lines = { (" "):rep(resx) }
-    for y = 1, resy do
-      buf_lines[y + 1] = buf_lines[1]
-    end
-    api.nvim_buf_set_lines(screen.buf, 0, -1, true, buf_lines)
-    api.nvim_set_option_value("modifiable", false, { buf = screen.buf })
+    screen.chan = api.nvim_open_term(screen.buf, {
+      on_input = nil, -- TODO
+      force_crlf = false,
+    })
 
     local screen_width = api.nvim_get_option_value("columns", {})
     local screen_height = api.nvim_get_option_value("lines", {})
       - api.nvim_get_option_value("cmdheight", {})
 
+    -- Minus 2 for the borders.
+    screen.width = math.max(1, math.floor(width or (screen_width - 2)))
+    screen.height = math.max(1, math.floor(height or (screen_height - 2)))
+    api.nvim_set_option_value("scrollback", screen.height, { buf = screen.buf })
+
     screen.win = api.nvim_open_win(screen.buf, true, {
       relative = "editor",
-      width = resx,
-      height = resy,
-      row = (screen_height - resy) / 2,
-      col = (screen_width - resx) / 2,
+      width = screen.width,
+      height = screen.height,
+      -- Minus 2 for the borders.
+      col = math.max(0, math.floor((screen_width - screen.width - 2) * 0.5)),
+      row = math.max(0, math.floor((screen_height - screen.height - 2) * 0.5)),
       style = "minimal",
       border = "rounded",
       title = "Doom",
@@ -222,8 +227,7 @@ function Screen.new(resx, resy, cmap256, buf_name)
       false,
       { scope = "local", win = screen.win }
     )
-
-    api.nvim_command "stopinsert"
+    -- api.nvim_command "startinsert" -- TODO
   end
   -- If in a fast context, we can't create the UI immediately.
   if vim.in_fast_event() then
@@ -232,7 +236,7 @@ function Screen.new(resx, resy, cmap256, buf_name)
     create_ui()
   end
 
-  return setmetatable(screen, { __index = Screen })
+  return screen
 end
 
 function Screen:close()
@@ -249,31 +253,48 @@ function Screen:close()
   end
 end
 
-function Screen:redraw()
-  if vim.in_fast_event() or not self.buf then
-    if not self.redraw_pending or not self.buf then
-      self.redraw_pending = true
-      vim.schedule(function()
-        self:redraw()
-      end)
-    end
-    return
-  end
-  self.redraw_pending = false
+--- @param x integer (0-based)
+--- @param y integer (0-based)
+--- @return integer (0-based)
+function Screen:pixel_index(x, y)
+  return (y * self.resx + x) * 3
+end
 
-  local i = 1
-  for y = 1, self.resy do
-    for x = 1, self.resx do
-      api.nvim_buf_set_extmark(self.buf, ns, y - 1, x - 1, {
-        -- Assumes extmark IDs are assigned sequentially, starting from 1.
-        -- If this doesn't hold true in the future, we'll need a lookup table.
-        id = i,
-        end_col = x,
-        hl_group = self.pixels:byte(i),
-        undo_restore = false,
-      })
-      i = i + 1
+do
+  local buf = StrBuf.new() -- Reuse the allocation if possible.
+
+  function Screen:redraw()
+    if vim.in_fast_event() or not self.buf then
+      if not self.redraw_pending or not self.buf then
+        self.redraw_pending = true
+        vim.schedule(function()
+          self:redraw()
+        end)
+      end
+      return
     end
+    self.redraw_pending = false
+
+    -- Clear screen and scrollback.
+    buf:put "\27[3J"
+    if self.pixels then
+      for y = 0, self.height - 1 do -- 0-indexed
+        for x = 0, self.width - 1 do -- 0-indexed
+          local pixel_x = math.floor((x / self.width) * self.resx) -- 0-indexed
+          local pixel_y = math.floor((y / self.height) * self.resy) -- 0-indexed
+          local pixel_i = self:pixel_index(pixel_x, pixel_y) + 1
+
+          local b, g, r = self.pixels:byte(pixel_i, pixel_i + 3)
+          -- Set background RGB "truecolour", write a space.
+          buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
+        end
+
+        if y + 1 < self.height then
+          buf:put "\r\n"
+        end
+      end
+    end
+    api.nvim_chan_send(self.chan, buf:get())
   end
 end
 
@@ -386,21 +407,15 @@ local function recv_msg_loop(doom)
   local function read_string()
     return read_bytes(read16())
   end
-  --- @return boolean
-  local function read_bool()
-    return read8() ~= 0
-  end
 
   local proto_version = read32()
   local resx = read16()
   local resy = read16()
-  local cmap256 = read_bool()
   doom.console:plugin_print(
-    ("AMSG_INIT: proto_version=%d resx=%d resy=%d cmap256=%s\n"):format(
+    ("AMSG_INIT: proto_version=%d resx=%d resy=%d\n"):format(
       proto_version,
       resx,
-      resy,
-      tostring(cmap256)
+      resy
     ),
     "Comment"
   )
@@ -419,7 +434,8 @@ local function recv_msg_loop(doom)
   doom.screen = Screen.new(
     resx,
     resy,
-    cmap256,
+    nil,
+    nil,
     ("actually-doom://screen//%d"):format(doom.process.pid)
   )
 

@@ -24,8 +24,7 @@
 // Integer values are sent as little-endian (network byte order considered
 // cringe).
 enum {
-    // #ifdef CMAP256: AMSG_FRAME, pixels:  u8[resx * resy]
-    // #else:          AMSG_FRAME, pixels: u32[resx * resy]
+    // AMSG_FRAME, pixels: u24[resx * resy]
     AMSG_FRAME = 0,
 
     // AMSG_SET_TITLE, title: String
@@ -36,7 +35,7 @@ static const char *listen_sock_path;
 static int listen_sock_fd = -1;
 static int comm_sock_fd = -1;
 
-#define COMM_BUF_CAP (2 * DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t))
+#define COMM_BUF_CAP (2 * DOOMGENERIC_RESX * DOOMGENERIC_RESY * 3)
 
 static struct {
     char data[COMM_BUF_CAP];
@@ -91,6 +90,17 @@ static void CommWrite16(uint16_t v)
 
     comm_buf.data[comm_buf.len++] = v & 0xff;
     comm_buf.data[comm_buf.len++] = (v >> 8) & 0xff;
+}
+
+static void CommWrite24(uint32_t v)
+{
+    assert(COMM_BUF_CAP >= 3);
+    if (comm_buf.len + 3 > COMM_BUF_CAP)
+        CommFlush();
+
+    comm_buf.data[comm_buf.len++] = v & 0xff;
+    comm_buf.data[comm_buf.len++] = (v >> 8) & 0xff;
+    comm_buf.data[comm_buf.len++] = (v >> 16) & 0xff;
 }
 
 static void CommWrite32(uint32_t v)
@@ -291,32 +301,20 @@ void DG_Init(void)
     CloseListenSocket();
     clock_start_ms = GetClockMs();
 
-    // "AMSG_INIT": proto_version: u32, resx: u16, resy: u16, CMAP256: bool
+    // "AMSG_INIT": proto_version: u32, resx: u16, resy: u16
     CommWrite32(AMSG_PROTO_VERSION);
     CommWrite16(DOOMGENERIC_RESX);
     CommWrite16(DOOMGENERIC_RESY);
-    CommWrite8(
-#ifdef CMAP256
-        true
-#else
-        false
-#endif
-    );
 }
 
 void DG_DrawFrame(void)
 {
     CommWrite8(AMSG_FRAME);
 
-#ifdef CMAP256
-    CommWriteBytes((char *)DG_ScreenBuffer,
-                   DOOMGENERIC_RESX * DOOMGENERIC_RESY);
-#else
-    // TODO: possibly slow; it may do a flush check for each u32 (also we're
+    // TODO: possibly slow; it may do a flush check for each u24 (also we're
     // manually splitting the bytes)
     for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
-        CommWrite32(DG_ScreenBuffer[i]);
-#endif
+        CommWrite24(DG_ScreenBuffer[i]);
 }
 
 void DG_SleepMs(uint32_t ms)
