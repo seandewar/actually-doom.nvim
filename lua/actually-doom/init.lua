@@ -164,6 +164,7 @@ end
 --- @field pixels string?
 --- @field pixels_len integer
 --- @field redraw_pending boolean?
+--- @field blend boolean?
 ---
 --- @field closed boolean?
 --- @field buf integer?
@@ -183,6 +184,7 @@ function Screen.new(resx, resy, width, height, buf_name)
   local screen = setmetatable({
     resx = resx,
     resy = resy,
+    blend = true,
   }, { __index = Screen })
   screen.pixels_len = screen:pixel_index(resx, resy - 1)
 
@@ -200,6 +202,7 @@ function Screen.new(resx, resy, width, height, buf_name)
       on_input = nil, -- TODO
       force_crlf = false,
     })
+    api.nvim_chan_send(screen.chan, "\27[?25l") -- Hide the cursor.
 
     local screen_width = api.nvim_get_option_value("columns", {})
     local screen_height = api.nvim_get_option_value("lines", {})
@@ -219,15 +222,13 @@ function Screen.new(resx, resy, width, height, buf_name)
       row = math.max(0, math.floor((screen_height - screen.height - 2) * 0.5)),
       style = "minimal",
       border = "rounded",
-      title = "Doom",
+      title = "DOOM",
       title_pos = "center",
     })
-    api.nvim_set_option_value(
-      "wrap",
-      false,
-      { scope = "local", win = screen.win }
-    )
-    -- api.nvim_command "startinsert" -- TODO
+    api.nvim_set_option_value("wrap", false, { win = screen.win })
+
+    screen:redraw()
+    api.nvim_command "startinsert"
   end
   -- If in a fast context, we can't create the UI immediately.
   if vim.in_fast_event() then
@@ -261,11 +262,81 @@ function Screen:pixel_index(x, y)
 end
 
 do
+  -- From https://gist.github.com/MicahElliott/719710?permalink_comment_id=1442838#gistcomment-1442838
+  -- Keep this sorted.
+  local cube_levels = { 0, 95, 135, 175, 215, 255 }
+  -- DOOM generally only uses a limited palette, so caching the result of
+  -- rgb_to_xterm256 brings a performance uplift.
+  local xterm_colour_cache = {}
+
+  --- Convert RGB to the closest xterm-256 colour. Excludes the first 16 system
+  --- colours. Not intended to be super accurate.
+  --- @param r integer
+  --- @param g integer
+  --- @param b integer
+  --- @return integer
+  local function rgb_to_xterm256(r, g, b)
+    local cache_key = b + (g * 256) + (r * 65536)
+    if xterm_colour_cache[cache_key] then
+      return xterm_colour_cache[cache_key]
+    end
+
+    --- @param x integer
+    --- @return integer
+    local function nearest_cube_idx(x)
+      local min_diff = math.abs(x - cube_levels[1])
+      for i = 2, #cube_levels do
+        local diff = math.abs(x - cube_levels[i])
+        if diff >= min_diff then
+          -- Levels are sorted, so we can return as soon as the difference
+          -- starts increasing again.
+          return i - 1
+        end
+        min_diff = diff
+      end
+      return #cube_levels
+    end
+
+    --- @param r2 integer
+    --- @param b2 integer
+    --- @param g2 integer
+    --- @return integer
+    local function dist_sq(r2, g2, b2)
+      return (r - r2) ^ 2 + (g - g2) ^ 2 + (b - b2) ^ 2
+    end
+
+    -- Cube colour.
+    local ri = nearest_cube_idx(r)
+    local gi = nearest_cube_idx(g)
+    local bi = nearest_cube_idx(b)
+    local cube_dist = dist_sq(cube_levels[ri], cube_levels[gi], cube_levels[bi])
+
+    -- Grayscale (232–255): 24 shades from levels 8-238 (in increments of 10).
+    local brightness = math.floor((r + g + b) / 3) -- Average brightness.
+    local gray_i = math.floor((brightness - 8) / 10 + 0.5)
+    -- Clamp to number of shades. (0-indexed)
+    gray_i = math.max(0, math.min(23, gray_i))
+    local gray_level = 8 + gray_i * 10
+    local gray_dist = dist_sq(gray_level, gray_level, gray_level)
+
+    local colour
+    if gray_dist < cube_dist then
+      colour = 232 + gray_i -- Gray is closer.
+    else
+      colour = 16 + 36 * (ri - 1) + 6 * (gi - 1) + (bi - 1) -- Cube is closer.
+    end
+    xterm_colour_cache[cache_key] = colour
+    return colour
+  end
+
   local buf = StrBuf.new() -- Reuse the allocation if possible.
 
   function Screen:redraw()
-    if vim.in_fast_event() or not self.buf then
-      if not self.redraw_pending or not self.buf then
+    if not self.chan then
+      return
+    end
+    if vim.in_fast_event() then
+      if not self.redraw_pending then
         self.redraw_pending = true
         vim.schedule(function()
           self:redraw()
@@ -273,27 +344,79 @@ do
       end
       return
     end
-    self.redraw_pending = false
 
-    -- Clear screen and scrollback.
-    buf:put "\27[3J"
+    self.redraw_pending = false
+    if not api.nvim_buf_is_valid(self.buf) then
+      return -- Terminal buffer channel will be dead.
+    end
+
     if self.pixels then
+      local true_colour = api.nvim_get_option_value("termguicolors", {})
+        or fn.has "gui_running" == 1
+
+      --- @param x integer (0-indexed)
+      --- @param y integer (0-indexed)
+      --- @return integer, integer (0-indexed)
+      local function pixel_topleft_pos(x, y)
+        local pix_x =
+          math.min(math.floor((x / self.width) * self.resx), self.resx)
+        local pix_y =
+          math.min(math.floor((y / self.height) * self.resy), self.resy)
+        return pix_x, pix_y
+      end
+
+      -- Cursor to 0,0.
+      buf:put "\27[H"
+
       for y = 0, self.height - 1 do -- 0-indexed
         for x = 0, self.width - 1 do -- 0-indexed
-          local pixel_x = math.floor((x / self.width) * self.resx) -- 0-indexed
-          local pixel_y = math.floor((y / self.height) * self.resy) -- 0-indexed
-          local pixel_i = self:pixel_index(pixel_x, pixel_y) + 1
+          -- Pixel positions are 0-indexed.
+          local pix_x, pix_y = pixel_topleft_pos(x, y)
+          local r, g, b
+          if self.blend then
+            -- Blend all pixels within this cell.
+            local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
+            pix_x2 = math.min(self.resx - 1, pix_x2)
+            pix_y2 = math.min(self.resy - 1, pix_y2)
+            local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
+            r, g, b = 0, 0, 0
+            for py = pix_y, pix_y2 do
+              for px = pix_x, pix_x2 do
+                local pi = self:pixel_index(px, py) + 1
+                local pb, pg, pr = self.pixels:byte(pi, pi + 3)
+                r = r + pr
+                g = g + pg
+                b = b + pb
+              end
+            end
 
-          local b, g, r = self.pixels:byte(pixel_i, pixel_i + 3)
-          -- Set background RGB "truecolour", write a space.
-          buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
+            r = math.min(255, math.floor(r / pix_count + 0.5))
+            g = math.min(255, math.floor(g / pix_count + 0.5))
+            b = math.min(255, math.floor(b / pix_count + 0.5))
+          else
+            -- Just use the pixel at the top-left.
+            local pix_i = self:pixel_index(pix_x, pix_y) + 1
+            b, g, r = self.pixels:byte(pix_i, pix_i + 3)
+          end
+
+          if true_colour then
+            -- Set background RGB "true" colour and write a space.
+            buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
+          else
+            -- Same as above, but using a near xterm-256 colour instead.
+            buf:put("\27[48;5;", rgb_to_xterm256(r, g, b), "m ")
+          end
         end
 
         if y + 1 < self.height then
           buf:put "\r\n"
         end
       end
+    else
+      -- Reset attributes, clear screen, clear scrollback.
+      buf:put "\27[0m\27[2J\27[3J"
     end
+
     api.nvim_chan_send(self.chan, buf:get())
   end
 end
@@ -443,6 +566,7 @@ local function recv_msg_loop(doom)
   local msg_handlers = {
     -- AMSG_FRAME
     [0] = function()
+      -- TODO: we should request frames instead so we don't get overwhelmed
       doom.screen:set_pixels(read_bytes(doom.screen.pixels_len))
     end,
 

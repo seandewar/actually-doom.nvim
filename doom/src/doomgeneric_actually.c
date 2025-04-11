@@ -24,7 +24,7 @@
 // Integer values are sent as little-endian (network byte order considered
 // cringe).
 enum {
-    // AMSG_FRAME, pixels: u24[resx * resy]
+    // AMSG_FRAME, pixels: u24[resx * resy] (BGR)
     AMSG_FRAME = 0,
 
     // AMSG_SET_TITLE, title: String
