@@ -1,12 +1,13 @@
 local api = vim.api
 local fn = vim.fn
 
-if fn.has "nvim-0.11" == 0 then
-  api.nvim_echo(
-    { { "[actually-doom.nvim] Nvim v0.11 or newer is required" } },
-    true,
-    { err = true }
-  )
+if fn.has "nvim-0.11" == 0 or not pcall(require, "string.buffer") then
+  api.nvim_echo({
+    {
+      '[actually-doom.nvim] Nvim v0.11+ with "string.buffer" library support '
+        .. "is required",
+    },
+  }, true, { err = true })
   return
 end
 

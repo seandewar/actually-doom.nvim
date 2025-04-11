@@ -13,6 +13,10 @@
 #include "m_argv.h"
 
 #define NS_PER_MS (1000 * 1000)
+#define MS_PER_SEC 1000
+
+// Bump after a breaking change to the messaging protocol.
+#define AMSG_PROTO_VERSION 0
 
 // Message types are 8-bit values.
 // Strings are 16-bit lengths followed by 8-bit data (not NUL-terminated).
@@ -20,15 +24,12 @@
 // Integer values are sent as little-endian (network byte order considered
 // cringe).
 enum {
-    // AMSG_INIT, resx: u16, resy: u16
-    AMSG_INIT = 0,
-
     // #ifdef CMAP256: AMSG_FRAME, pixels:  u8[resx * resy]
     // #else:          AMSG_FRAME, pixels: u32[resx * resy]
-    AMSG_FRAME = 1,
+    AMSG_FRAME = 0,
 
     // AMSG_SET_TITLE, title: String
-    AMSG_SET_TITLE = 2,
+    AMSG_SET_TITLE = 1,
 };
 
 static const char *listen_sock_path;
@@ -56,7 +57,7 @@ static void CommFlush(void)
     if (comm_buf.len == 0 || comm_sock_fd < 0)
         return;
 
-    for (size_t sent = 0; sent < comm_buf.len || !interrupted;) {
+    for (size_t sent = 0; sent < comm_buf.len && !interrupted;) {
         size_t send_len = comm_buf.len - sent;
 
         ssize_t ret = send(comm_sock_fd, comm_buf.data + sent, send_len, 0);
@@ -92,7 +93,6 @@ static void CommWrite16(uint16_t v)
     comm_buf.data[comm_buf.len++] = (v >> 8) & 0xff;
 }
 
-#ifndef CMAP256
 static void CommWrite32(uint32_t v)
 {
     assert(COMM_BUF_CAP >= 4);
@@ -104,7 +104,6 @@ static void CommWrite32(uint32_t v)
     comm_buf.data[comm_buf.len++] = (v >> 16) & 0xff;
     comm_buf.data[comm_buf.len++] = (v >> 24) & 0xff;
 }
-#endif
 
 static void CommWriteBytes(const char *p, size_t len)
 {
@@ -211,7 +210,7 @@ static uint32_t GetClockMs(void)
                 strerror(errno));
     }
 
-    return tp.tv_nsec / NS_PER_MS;
+    return (tp.tv_sec * MS_PER_SEC) + (tp.tv_nsec / NS_PER_MS);
 }
 
 void DG_Init(void)
@@ -292,9 +291,17 @@ void DG_Init(void)
     CloseListenSocket();
     clock_start_ms = GetClockMs();
 
-    CommWrite8(AMSG_INIT);
+    // "AMSG_INIT": proto_version: u32, resx: u16, resy: u16, CMAP256: bool
+    CommWrite32(AMSG_PROTO_VERSION);
     CommWrite16(DOOMGENERIC_RESX);
     CommWrite16(DOOMGENERIC_RESY);
+    CommWrite8(
+#ifdef CMAP256
+        true
+#else
+        false
+#endif
+    );
 }
 
 void DG_DrawFrame(void)

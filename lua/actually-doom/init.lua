@@ -3,7 +3,14 @@ local fn = vim.fn
 local fs = vim.fs
 local uv = vim.uv
 
+--- @alias StrBuf string.buffer
+local StrBuf = require "string.buffer"
+
 local M = {}
+
+--- Supported message protocol version for communications with the DOOM process.
+--- Bump this after a breaking protocol change.
+local supported_proto_version = 0
 
 local script_dir = (function()
   return fn.fnamemodify(debug.getinfo(2, "S").source:sub(2), ":h:p")
@@ -154,11 +161,16 @@ end
 --- @class Doom
 --- @field console Console
 --- @field process vim.SystemObj
---- @field closed boolean?
 --- @field sock uv.uv_pipe_t
+--- @field closed boolean?
 ---
 --- @field connect_timer uv.uv_timer_t?
 --- @field connect_request uv.uv_connect_t?
+---
+--- @field recv_buf StrBuf?
+--- @field resx integer?
+--- @field resy integer?
+--- @field cmap256 boolean?
 local Doom = {}
 
 --- @param doom Doom
@@ -210,13 +222,101 @@ local function init_process(doom, sock_path)
 end
 
 --- @param doom Doom
---- @param err nil|string
---- @param data string|nil
-local function on_sock_read(doom, err, data)
-  if err then
-    error(err)
+local function recv_msg_loop(doom)
+  --- @param n integer
+  --- @return string
+  local function read_bytes(n)
+    while n > #doom.recv_buf do
+      coroutine.yield()
+    end
+    return doom.recv_buf:get(n)
   end
-  doom.console:print(data or "")
+
+  --- @return integer
+  local function read8()
+    return read_bytes(1):byte()
+  end
+  --- @return integer
+  local function read16()
+    local a, b = read_bytes(2):byte(1, 2)
+    return a + (b * 256)
+  end
+  --- @return integer
+  local function read32()
+    local a, b, c, d = read_bytes(4):byte(1, 4)
+    return a + (b * 256) + (c * 65536) + (d * 16777216)
+  end
+  --- @return string
+  local function read_string()
+    return read_bytes(read16())
+  end
+  --- @return boolean
+  local function read_bool()
+    return read8() ~= 0
+  end
+
+  local proto_version = read32()
+  local resx = read16()
+  local resy = read16()
+  local cmap256 = read_bool()
+  doom.console:plugin_print(
+    (
+      "AMSG_INIT: proto_version=%d resx=%d resy=%d cmap256=%s\n"
+    ):format(proto_version, resx, resy, tostring(cmap256)),
+    "Comment"
+  )
+
+  if proto_version ~= supported_proto_version then
+    doom.console:plugin_print(
+      (
+        "DOOM process reports incompatible message protocol version %d "
+        .. "(expected %d); please rebuild the DOOM executable. Quitting\n"
+      ):format(proto_version, supported_proto_version),
+      "ErrorMsg"
+    )
+    doom:close()
+    return
+  end
+  doom.resx = resx
+  doom.resy = resy
+  doom.cmap256 = cmap256
+
+  --- @type table<integer, fun()>
+  local msg_handlers = {
+    -- AMSG_FRAME
+    [0] = function()
+      local n = doom.resx * doom.resy * (doom.cmap256 and 1 or 4)
+      read_bytes(n)
+      doom.console:plugin_print(
+        ("AMSG_FRAME: size=%d bytes\n"):format(n),
+        "Comment"
+      )
+    end,
+
+    -- AMSG_SET_TITLE
+    [1] = function()
+      local title = read_string()
+      doom.console:plugin_print(
+        ('AMSG_SET_TITLE: title="%s"\n'):format(title),
+        "Comment"
+      )
+    end,
+  }
+
+  while true do
+    local msg_type = read8()
+    local handler = msg_handlers[msg_type]
+    if handler then
+      handler()
+    else
+      doom.console:plugin_print(
+        ("Received unknown message type: %d; quitting\n"):format(msg_type),
+        "ErrorMsg"
+      )
+      doom:close()
+      return
+    end
+  end
 end
 
 --- @param doom Doom
@@ -226,16 +326,16 @@ local function init_connection(doom, sock_path)
   local tries_left = 20
   local schedule_connect -- Late assignment so connect_cb can call it.
 
-  --- @param err string?
-  local function connect_cb(err)
+  --- @param conn_err nil|string
+  local function connect_cb(conn_err)
     doom.connect_request = nil
-    if err then
+    if conn_err then
       tries_left = tries_left - 1
       doom.console:plugin_print(
         (
           "Failed to connect to the DOOM process: %s "
           .. "(%d attempt(s) left)\n"
-        ):format(err, tries_left),
+        ):format(conn_err, tries_left),
         "WarningMsg"
       )
       if tries_left <= 0 then
@@ -252,8 +352,24 @@ local function init_connection(doom, sock_path)
     end
 
     doom.console:plugin_print "Connected to the DOOM process\n"
-    assert(doom.sock:read_start(doom:close_on_err_wrap(function(...)
-      return on_sock_read(doom, ...)
+    doom.recv_buf = StrBuf.new(1024)
+    local recv_co = coroutine.create(recv_msg_loop)
+    assert(coroutine.resume(recv_co, doom)) -- Pass the initial Doom argument.
+
+    --- @param read_err nil|string
+    --- @param data string|nil
+    assert(doom.sock:read_start(doom:close_on_err_wrap(function(read_err, data)
+      if read_err then
+        doom.console:plugin_print(
+          ("Read error; quitting: %s\n"):format(read_err),
+          "ErrorMsg"
+        )
+        doom:close()
+        return
+      end
+
+      doom.recv_buf:put(assert(data))
+      assert(coroutine.resume(recv_co))
     end)))
   end
 
@@ -343,12 +459,14 @@ end
 --- upon an unhandled error and re-throw it.
 ---
 --- This should only be used when errors are unexpected, like logic errors.
+--- Errors communicating with the DOOM process should not throw errors that are
+--- handled by this.
 ---
 --- @param f function
 --- @param ... any arguments to pass to `f`
 --- @return any ...
 function Doom:close_on_err(f, ...)
-  --- Allows us to return multiple return values from `f`.
+  --- Allows us to return multiple values from `f`.
   --- @return integer, table
   local function pack(...)
     return select("#", ...), { ... }
