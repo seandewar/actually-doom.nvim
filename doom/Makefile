@@ -19,7 +19,7 @@ OBJS := am_map.o doomstat.o dstrings.o d_event.o d_items.o d_iwad.o \
         w_file_stdc.o i_input.o i_video.o doomgeneric.o doomgeneric_actually.o
 
 OBJS := $(addprefix $(OUTDIR)/,$(OBJS))
-OUTPUT := $(OUTDIR)/doomgeneric_actually
+OUTPUT := $(OUTDIR)/actually_doom
 
 .PHONY: all clean
 .DELETE_ON_ERROR:

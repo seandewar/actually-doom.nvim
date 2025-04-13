@@ -1323,6 +1323,7 @@ void G_WorldDone(void)
         case 31:
             if (!secretexit)
                 break;
+            // fallthrough
         case 6:
         case 11:
         case 20:
@@ -1800,7 +1801,8 @@ int G_VanillaVersionCode(void)
 {
     switch (gameversion) {
     case exe_doom_1_2:
-        I_Error("Doom 1.2 does not have a version code!");
+        I_Error("Doom 1.2 does not have a version code!"); // noreturn
+        abort();
     case exe_doom_1_666:
         return 106;
     case exe_doom_1_7:

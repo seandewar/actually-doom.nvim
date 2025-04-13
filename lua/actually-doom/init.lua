@@ -3,6 +3,17 @@ local fn = vim.fn
 local fs = vim.fs
 local uv = vim.uv
 
+local ffi
+do
+  local ok, rv = pcall(require, "ffi")
+  if ok then
+    ffi = rv
+    ffi.cdef [[
+      void clear_hl_tables(bool reinit);
+    ]]
+  end
+end
+
 --- @alias StrBuf string.buffer
 local StrBuf = require "string.buffer"
 
@@ -21,13 +32,13 @@ local ns = api.nvim_create_namespace "actually-doom"
 --- @class HlExtmark
 --- @field id integer
 --- @field hl string
---- @field start_row integer
---- @field start_col integer
+--- @field start_row integer 0-indexed.
+--- @field start_col integer 0-indexed.
 
 --- @class Console
 --- @field buf integer
---- @field last_row integer
---- @field last_col integer
+--- @field last_row integer 0-indexed.
+--- @field last_col integer 0-indexed.
 --- @field last_extmark HlExtmark?
 local Console = {}
 
@@ -149,6 +160,14 @@ function Console:print(text, hl)
   vim._with({ noautocmd = true }, function()
     api.nvim_set_option_value("modifiable", false, { buf = self.buf })
   end)
+
+  -- Tail console windows on the last line to the output.
+  for _, win in ipairs(fn.win_findbuf(self.buf)) do
+    local row, col = unpack(api.nvim_win_get_cursor(win))
+    if row == self.last_row + 1 then
+      api.nvim_win_set_cursor(win, { self.last_row + 1, col })
+    end
+  end
 end
 
 --- @see Console.print
@@ -162,30 +181,28 @@ end
 --- @field resx integer
 --- @field resy integer
 --- @field pixels string?
---- @field pixels_len integer
---- @field redraw_pending boolean?
 --- @field blend boolean?
+--- @field redraw_scheduled boolean?
 ---
 --- @field closed boolean?
 --- @field buf integer?
 --- @field win integer?
---- @field chan integer?
+--- @field term_chan integer?
 --- @field width integer?
 --- @field height integer?
 local Screen = {}
 
 --- @param resx integer
 --- @param resy integer
---- @param on_input fun(_: string, term: integer, buf: integer, data: string)?
+--- @param term_input_cb fun(_: string, term: integer, buf: integer, data: string)?
 --- @param buf_name string?
 --- @return Screen
-function Screen.new(resx, resy, on_input, buf_name)
+function Screen.new(resx, resy, term_input_cb, buf_name)
   local screen = setmetatable({
     resx = resx,
     resy = resy,
     blend = true,
   }, { __index = Screen })
-  screen.pixels_len = screen:pixel_index(resx, resy - 1)
 
   local function create_ui()
     -- It's possible we were closed beforehand if this operation was scheduled.
@@ -197,11 +214,12 @@ function Screen.new(resx, resy, on_input, buf_name)
     if buf_name then
       api.nvim_buf_set_name(screen.buf, buf_name)
     end
-    screen.chan = api.nvim_open_term(screen.buf, {
-      on_input = on_input,
+    screen.term_chan = api.nvim_open_term(screen.buf, {
+      on_input = term_input_cb,
       force_crlf = false,
     })
-    api.nvim_chan_send(screen.chan, "\27[?25l") -- Hide the cursor.
+    -- Hide the cursor, disable line wrapping.
+    api.nvim_chan_send(screen.term_chan, "\27[?25l\27?7l")
 
     local screen_width = api.nvim_get_option_value("columns", {})
     local screen_height = api.nvim_get_option_value("lines", {})
@@ -210,7 +228,8 @@ function Screen.new(resx, resy, on_input, buf_name)
     -- Minus 2 for the borders.
     screen.width = math.max(1, math.floor(screen_width - 2))
     screen.height = math.max(1, math.floor(screen_height - 2))
-    api.nvim_set_option_value("scrollback", screen.height, { buf = screen.buf })
+    -- Disable the scrollback buffer as much as we can.
+    api.nvim_set_option_value("scrollback", 1, { buf = screen.buf })
 
     screen.win = api.nvim_open_win(screen.buf, true, {
       relative = "editor",
@@ -221,11 +240,11 @@ function Screen.new(resx, resy, on_input, buf_name)
       row = math.max(0, math.floor((screen_height - screen.height - 2) * 0.5)),
       style = "minimal",
       border = "rounded",
-      title = "DOOM",
-      title_pos = "center",
     })
+    api.nvim_set_option_value("winfixbuf", true, { win = screen.win })
     api.nvim_set_option_value("wrap", false, { win = screen.win })
 
+    screen:update_title()
     screen:redraw()
     api.nvim_command "startinsert"
   end
@@ -313,8 +332,8 @@ do
     -- Grayscale (232–255): 24 shades from levels 8-238 (in increments of 10).
     local brightness = math.floor((r + g + b) / 3) -- Average brightness.
     local gray_i = math.floor((brightness - 8) / 10 + 0.5)
-    -- Clamp to number of shades. (0-indexed)
     gray_i = math.max(0, math.min(23, gray_i))
+    -- Clamp to number of shades. (0-indexed)
     local gray_level = 8 + gray_i * 10
     local gray_dist = dist_sq(gray_level, gray_level, gray_level)
 
@@ -331,22 +350,22 @@ do
   local buf = StrBuf.new() -- Reuse the allocation if possible.
 
   function Screen:redraw()
-    if not self.chan then
+    if not self.term_chan then
       return
     end
     if vim.in_fast_event() then
-      if not self.redraw_pending then
-        self.redraw_pending = true
+      if not self.redraw_scheduled then
+        self.redraw_scheduled = true
         vim.schedule(function()
+          self.redraw_scheduled = false
           self:redraw()
         end)
       end
       return
     end
-
-    self.redraw_pending = false
-    if not api.nvim_buf_is_valid(self.buf) then
-      return -- Terminal buffer channel will be dead.
+    if fn.bufwinnr(self.buf) == -1 then
+      -- TODO: even better if we don't request frames at all in this case
+      return -- Buffer not shown in this tabpage.
     end
 
     if self.pixels then
@@ -411,12 +430,25 @@ do
           buf:put "\r\n"
         end
       end
+
+      -- When using RGB, it's possible for Nvim to run out of free highlighting
+      -- attribute entries, causing transparent cells to be drawn (showing the
+      -- background colour of the Screen window) after Nvim clears and rebuilds
+      -- the attribute tables. We can work around this by forcing a rebuild of
+      -- the tables before we send the frame, but this requires LuaJIT.
+      if true_colour and ffi then
+        ffi.C.clear_hl_tables(true)
+      end
     else
       -- Reset attributes, clear screen, clear scrollback.
       buf:put "\27[0m\27[2J\27[3J"
     end
 
-    api.nvim_chan_send(self.chan, buf:get())
+    -- Get the size of the terminal by moving the cursor to the bottom-right and
+    -- then querying its position (DSR). This is so we can detect resizes.
+    buf:put "\27[99999;99999H\27[6n"
+
+    api.nvim_chan_send(self.term_chan, buf:get())
   end
 end
 
@@ -426,17 +458,26 @@ function Screen:set_pixels(pixels)
   self:redraw()
 end
 
---- @param title string
-function Screen:set_title(title)
+--- @param doom Doom?
+function Screen:update_title(doom)
   if vim.in_fast_event() or not self.win then
     vim.schedule(function()
-      self:set_title(title)
+      self:update_title(doom)
     end)
     return
   end
 
   if api.nvim_win_is_valid(self.win) then
-    api.nvim_win_set_config(self.win, { title = title })
+    api.nvim_win_set_config(self.win, {
+      title = {
+        { " " },
+        { doom and doom.title or "DOOM" },
+        { " " },
+        { doom and doom.shift_pressed and " Shift " or "", "CursorLine" },
+        { doom and doom.alt_pressed and " Alt " or "", "CursorLine" },
+      },
+      title_pos = "center",
+    })
   end
 end
 
@@ -444,27 +485,82 @@ end
 --- @field console Console
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
---- @field closed boolean?
+--- @field send_buf StrBuf
+--- @field check_timer uv.uv_timer_t
+--- @field title string?
+--- @field pending_key_releases table<integer, integer>
+--- @field shift_pressed boolean?
+--- @field alt_pressed boolean?
 --- @field screen Screen?
----
---- @field connect_timer uv.uv_timer_t?
---- @field connect_request uv.uv_connect_t?
+--- @field closed boolean?
 local Doom = {}
 
-function Doom:request_frame()
-  -- TODO: Is it possible for this to fail immediately from an error
-  -- communicating rather than some unexpected error?
-  -- TODO: maybe make this send callback more conveient to pass around
-  --- @param err nil|string
-  assert(self.sock:write("\0", function(err)
+function Doom:send_frame_request()
+  -- CMSG_WANT_FRAME (no payload)
+  self.send_buf:put "\0"
+end
+
+--- Schedules a check to happen in approximately `ms` milliseconds from now.
+--- If a check is already scheduled, reschedule it if `ms` is sooner.
+--- @param ms integer? If nil, schedule for the next event loop iteration.
+function Doom:schedule_check(ms)
+  local function check_cb()
+    local now = uv.now()
+    local next_sched_time = math.huge
+    local released_keys = {}
+    for doomkey, release_time in pairs(self.pending_key_releases) do
+      if now >= release_time then
+        self:send_key(doomkey, false)
+        -- Don't remove the released key entries yet; it might mess up pairs'
+        -- iteration order.
+        released_keys[#released_keys + 1] = doomkey
+      else
+        next_sched_time = math.min(next_sched_time, release_time)
+      end
+    end
+    for _, doomkey in ipairs(released_keys) do
+      self.pending_key_releases[doomkey] = nil
+    end
+
+    self:flush_send()
+    if next_sched_time < math.huge then
+      -- As some time may have passed, use the updated now time.
+      self:schedule_check(next_sched_time - uv.now())
+    end
+  end
+
+  ms = ms and math.max(0, ms) or 0
+  local due_in = self.check_timer:get_due_in()
+  if due_in == 0 or due_in > ms then
+    assert(self.check_timer:start(ms, 0, self:close_on_err_wrap(check_cb)))
+  end
+end
+
+--- @param doomkey integer
+--- @param pressed boolean
+function Doom:send_key(doomkey, pressed)
+  -- CMSG_PRESS_KEY
+  self.send_buf:put("\1", string.char(doomkey), pressed and "\1" or "\0")
+end
+
+function Doom:flush_send()
+  if #self.send_buf == 0 then
+    return
+  end
+
+  local data = self.send_buf:get()
+  --- @param err string?
+  local function handle_err(err)
     if err then
       self.console:plugin_print(
-        ("Send error; quitting: %s\n"):format(err),
+        ("Failed to send %d byte(s); quitting: %s\n"):format(#data, err),
         "ErrorMsg"
       )
       self:close()
     end
-  end)) -- CMSG_WANT_FRAME
+  end
+  local _, err = self.sock:write(data, handle_err)
+  handle_err(err)
 end
 
 --- @param doom Doom
@@ -473,7 +569,7 @@ local function init_process(doom, sock_path)
   --- @param msg_hl string?
   --- @return fun(err: nil|string, data: string|nil)
   --- @nodiscard
-  local function new_on_out_func(msg_hl)
+  local function new_out_cb(msg_hl)
     return function(err, data)
       if err then
         doom.console:plugin_print(
@@ -487,7 +583,7 @@ local function init_process(doom, sock_path)
   end
 
   --- @param out vim.SystemCompleted
-  local on_exit = function(out)
+  local exit_cb = function(out)
     doom.console:print "\n"
     doom.console:plugin_print(
       ("DOOM (PID %d) exited with code %d\n"):format(doom.process.pid, out.code),
@@ -497,15 +593,15 @@ local function init_process(doom, sock_path)
   end
 
   local sys_ok, sys_rv = pcall(vim.system, {
-    fs.joinpath(script_dir, "../../doom/build/doomgeneric_actually"),
+    fs.joinpath(script_dir, "../../doom/build/actually_doom"),
     "-listen",
     sock_path,
     "-iwad",
     fs.joinpath(script_dir, "../../doom/DOOM1.WAD"),
   }, {
-    stdout = new_on_out_func(),
-    stderr = new_on_out_func "WarningMsg",
-  }, on_exit)
+    stdout = new_out_cb(),
+    stderr = new_out_cb "WarningMsg",
+  }, exit_cb)
 
   if not sys_ok then
     error(("[actually-doom.nvim] Failed to run DOOM: %s"):format(sys_rv), 0)
@@ -515,12 +611,105 @@ local function init_process(doom, sock_path)
   doom.console:plugin_print(("DOOM started as PID %d\n\n"):format(sys_rv.pid))
 end
 
---- @param doom Doom
---- @param chan integer
---- @param buf integer
---- @param data string
-local function input_cb(doom, _, chan, buf, data)
-  -- TODO
+--- @type fun(doom: Doom, _: string, chan: integer, buf: integer, data: string)
+local term_input_cb
+do
+  local to_doomkey = {
+    -- Single characters use their numeric values as the table key.
+    [32] = 162, -- Space; KEY_USE
+    [120] = 163, -- x; KEY_FIRE
+
+    -- Escape sequences (and multi-characters) use strings as the table key.
+    -- These don't take into account modifiers, but maybe they should.
+    ["\27[A"] = 173, -- KEY_UPARROW
+    ["\27[B"] = 175, -- KEY_DOWNARROW
+    ["\27[C"] = 174, -- KEY_RIGHTARROW
+    ["\27[D"] = 172, -- KEY_LEFTARROW
+    ["\27OP"] = 187, -- KEY_F1
+    ["\27OQ"] = 188, -- KEY_F2
+    ["\27OR"] = 189, -- KEY_F3
+    ["\27OS"] = 190, -- KEY_F4
+    ["\27[15~"] = 191, -- KEY_F5
+    ["\27[17~"] = 192, -- KEY_F6
+    ["\27[18~"] = 193, -- KEY_F7
+    ["\27[19~"] = 194, -- KEY_F8
+    ["\27[20~"] = 195, -- KEY_F9
+    ["\27[21~"] = 196, -- KEY_F10
+    ["\27[23~"] = 215, -- KEY_F11
+    ["\27[24~"] = 216, -- KEY_F12
+    ["\27[H"] = 199, -- KEY_HOME
+    ["\27[5~"] = 201, -- KEY_PGUP
+    ["\27[6~"] = 209, -- KEY_PGDN
+  }
+
+  term_input_cb = function(doom, _, _, _, data)
+    local lines, columns = data:match "^\27%[(%d+);(%d+)R$"
+    if lines then
+      -- Cursor position report (DSR-CPR); requested by Screen.redraw to get the
+      -- size of the terminal.
+      --- @cast lines string
+      --- @cast columns string
+      doom.screen.width = tonumber(columns)
+      doom.screen.height = tonumber(lines)
+      return
+    end
+
+    local doomkey
+    if #data == 1 and data:byte() < 128 then
+      doomkey = data:byte()
+      -- Make uppercase A-Z lowercase.
+      if doomkey >= 65 and doomkey <= 90 then
+        doomkey = doomkey - 65 + 97 -- key - 'A' + 'a'
+      end
+      -- Default to the read key.
+      doomkey = to_doomkey[doomkey] or doomkey
+    else
+      doomkey = to_doomkey[data]
+    end
+
+    if doomkey then
+      -- As terminals don't typically support figuring out whether *just*
+      -- Alt/Shift alone is pressed, make them toggleable via different keys.
+      if doomkey == 97 then -- a
+        doom.alt_pressed = not doom.alt_pressed
+        doom:send_key(184, doom.alt_pressed) -- KEY_RALT
+        vim.schedule(function()
+          doom.screen:update_title(doom)
+        end)
+      elseif doomkey == 122 then -- z
+        doom.shift_pressed = not doom.shift_pressed
+        doom:send_key(182, doom.shift_pressed) -- KEY_RSHIFT
+        vim.schedule(function()
+          doom.screen:update_title(doom)
+        end)
+      else
+        -- Press other keys for a time before automatically releasing them.
+        -- When https://github.com/neovim/neovim/issues/27509 lands with the
+        -- kitty keyboard protocol key press/release events support, we won't
+        -- need to do this for supported terminals.
+
+        -- Reduce push time if Shift is pressed (as it speeds up movement) or
+        -- when firing.
+        local ms = 375
+        if doom.shift_pressed or doomkey == 163 then -- KEY_FIRE
+          ms = 250
+        end
+        doom:send_key(doomkey, true)
+        doom.pending_key_releases[doomkey] = uv.now() + ms
+      end
+
+      doom:schedule_check()
+      return
+    end
+
+    -- Schedule to avoid textlock.
+    vim.schedule(function()
+      doom.console:plugin_print(
+        ('Unhandled terminal input: "%s"\n'):format(data),
+        "Comment"
+      )
+    end)
+  end
 end
 
 --- @param doom Doom
@@ -582,28 +771,31 @@ local function recv_msg_loop(doom, buf)
     resx,
     resy,
     doom:close_on_err_wrap(function(...)
-      return input_cb(doom, ...)
+      return term_input_cb(doom, ...)
     end),
     ("actually-doom://screen//%d"):format(doom.process.pid)
   )
-  doom:request_frame()
+  doom:send_frame_request()
+  doom:schedule_check()
 
   --- @type table<integer, fun()>
   local msg_handlers = {
     -- AMSG_FRAME
     [0] = function()
-      doom.screen:set_pixels(read_bytes(doom.screen.pixels_len))
-      doom:request_frame()
+      local len = doom.screen:pixel_index(0, doom.screen.resy)
+      doom.screen:set_pixels(read_bytes(len))
+      doom:send_frame_request()
+      doom:schedule_check()
     end,
 
     -- AMSG_SET_TITLE
     [1] = function()
-      local title = read_string()
+      doom.title = read_string()
       doom.console:plugin_print(
-        ('AMSG_SET_TITLE: title="%s"\n'):format(title),
+        ('AMSG_SET_TITLE: title="%s"\n'):format(doom.title),
         "Comment"
       )
-      doom.screen:set_title(title)
+      doom.screen:update_title(doom)
     end,
   }
 
@@ -632,7 +824,6 @@ local function init_connection(doom, sock_path)
 
   --- @param conn_err nil|string
   local function connect_cb(conn_err)
-    doom.connect_request = nil
     if conn_err then
       tries_left = tries_left - 1
       doom.console:plugin_print(
@@ -656,7 +847,7 @@ local function init_connection(doom, sock_path)
     end
 
     doom.console:plugin_print "Connected to the DOOM process\n"
-    local recv_buf = StrBuf.new(1024)
+    local recv_buf = StrBuf.new(256)
     local recv_co = coroutine.create(recv_msg_loop)
     -- Pass the initial arguments.
     assert(coroutine.resume(recv_co, doom, recv_buf))
@@ -680,18 +871,16 @@ local function init_connection(doom, sock_path)
     end)))
   end
 
-  doom.connect_timer = assert(uv.new_timer())
   --- @param ms integer
   schedule_connect = function(ms)
     -- Forward the libuv errors from trying to schedule the operations so that
     -- they count as a failed connection attempt.
-    local _, err = doom.connect_timer:start(ms, 0, function()
-      local request, err =
+    local _, err = doom.check_timer:start(ms, 0, function()
+      local _, err =
         doom.sock:connect(sock_path, doom:close_on_err_wrap(connect_cb))
       if err then
         connect_cb(err) -- Forward the error.
       end
-      doom.connect_request = request
     end)
 
     if err then
@@ -705,7 +894,10 @@ end
 --- @return Doom
 function Doom.run()
   local doom = setmetatable({
+    check_timer = assert(uv.new_timer()),
+    send_buf = StrBuf.new(256),
     console = Console.new(),
+    pending_key_releases = {},
   }, { __index = Doom })
 
   local sock_path = ("/run/user/%d/actually-doom.%d.%d"):format(
@@ -744,15 +936,12 @@ function Doom:close(close_console)
   self.closed = true
 
   -- Non-nil fields may be nil if we're called during initialization.
-  if self.connect_request then
-    self.connect_request:cancel()
-  end
-  if self.connect_timer then
-    self.connect_timer:stop()
-    self.connect_timer:close()
+  if self.check_timer then
+    self.check_timer:stop()
+    self.check_timer:close()
   end
   if self.sock then
-    self.sock:close()
+    self.sock:close() -- Also closes pending requests and such.
   end
   if self.process then
     self.process:kill "sigterm" -- Try a clean shutdown.
@@ -789,11 +978,17 @@ function Doom:close_on_err(f, ...)
   end, debug.traceback)
 
   if not ok then
-    self.console:plugin_print(
-      ("Quitting after unexpected error: %s\n"):format(nrvs_or_err),
-      "ErrorMsg"
-    )
-    self:close()
+    -- In case we're textlocked.
+    -- TODO: honestly, textlock restrictions can screw us in other places; in
+    -- general I don't feel great about the error handling in this plugin,
+    -- probably best to simplify it all somehow.
+    vim.schedule(function()
+      self.console:plugin_print(
+        ("Quitting after unexpected error: %s\n"):format(nrvs_or_err),
+        "ErrorMsg"
+      )
+      self:close()
+    end)
     error(nrvs_or_err, 0) -- The double traceback is unfortunate.
   end
   return unpack(rvs, 1, nrvs_or_err)

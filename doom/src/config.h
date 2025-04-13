@@ -5,13 +5,13 @@
 #undef HAVE_MMAP
 
 // Define to the full name of this package.
-#define PACKAGE_NAME "Doom Generic"
+#define PACKAGE_NAME "actually-doom"
 
 // Define to the full name and version of this package.
-#define PACKAGE_STRING "Doom Generic 0.1"
+#define PACKAGE_STRING "actually-doom 0.1"
 
 // Change this when you create your awesome forked version
-#define PROGRAM_PREFIX "doomgeneric"
+#define PROGRAM_PREFIX "actually-doom"
 
 // Define to the directory where all game files are located
 #define FILES_DIR "."

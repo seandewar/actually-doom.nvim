@@ -305,12 +305,6 @@ void I_SetPalette(byte *palette)
         colors[i].g = gammatable[usegamma][*palette++];
         colors[i].b = gammatable[usegamma][*palette++];
     }
-
-#ifdef CMAP256
-
-    palette_changed = true;
-
-#endif // CMAP256
 }
 
 // Given an RGB value, find the closest matching palette index.
