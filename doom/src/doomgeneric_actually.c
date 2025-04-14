@@ -31,7 +31,7 @@ enum {
     // AMSG_FRAME, pixels: u24[resx * resy] (BGR)
     AMSG_FRAME = 0,
 
-    // AMSG_SET_TITLE, title: String
+    // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
 };
 

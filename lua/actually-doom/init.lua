@@ -29,6 +29,172 @@ end)()
 
 local ns = api.nvim_create_namespace "actually-doom"
 
+--- @type table<integer, Doom>
+local screen_buf_to_doom = {}
+
+local doomkey_use = 162 -- KEY_USE
+local doomkey_fire = 163 -- KEY_FIRE
+local doomkey_leftarrow = 172 -- KEY_LEFTARROW
+local doomkey_uparrow = 173 -- KEY_UPARROW
+local doomkey_rightarrow = 174 -- KEY_RIGHTARROW
+local doomkey_downarrow = 175 -- KEY_DOWNARROW
+local doomkey_rshift = 182 -- KEY_RSHIFT
+local doomkey_ralt = 184 -- KEY_RALT
+
+do
+  local special_to_doomkey = {
+    [vim.keycode "<BS>"] = 127, -- KEY_BACKSPACE
+    [vim.keycode "<Space>"] = doomkey_use,
+    -- TODO: though it can be specified, RMB isn't great as it leaves Terminal
+    -- mode; and <2-RightMouse> (double-clicking to use, like Vanilla) can't
+    -- work for a similar reason.
+    [vim.keycode "<RightMouse>"] = doomkey_use,
+    [vim.keycode "<Left>"] = doomkey_leftarrow,
+    [vim.keycode "<Up>"] = doomkey_uparrow,
+    [vim.keycode "<Right>"] = doomkey_rightarrow,
+    [vim.keycode "<Down>"] = doomkey_downarrow,
+    [vim.keycode "<F1>"] = 187, -- KEY_F1
+    [vim.keycode "<F2>"] = 188, -- KEY_F2
+    [vim.keycode "<F3>"] = 189, -- KEY_F3
+    [vim.keycode "<F4>"] = 190, -- KEY_F4
+    [vim.keycode "<F5>"] = 191, -- KEY_F5
+    [vim.keycode "<F6>"] = 192, -- KEY_F6
+    [vim.keycode "<F7>"] = 193, -- KEY_F7
+    [vim.keycode "<F8>"] = 194, -- KEY_F8
+    [vim.keycode "<F9>"] = 195, -- KEY_F9
+    [vim.keycode "<F10>"] = 196, -- KEY_F10
+    [vim.keycode "<F11>"] = 215, -- KEY_F11
+    [vim.keycode "<F12>"] = 216, -- KEY_F12
+    [vim.keycode "<Home>"] = 199, -- KEY_HOME
+    [vim.keycode "<End>"] = 207, -- KEY_END
+    [vim.keycode "<PageUp>"] = 201, -- KEY_PGUP
+    [vim.keycode "<PageDown>"] = 209, -- KEY_PGDN
+    [vim.keycode "<Insert>"] = 210, -- KEY_INS
+    [vim.keycode "<Del>"] = 211, -- KEY_DEL
+  }
+
+  --- @param key integer
+  --- @return boolean
+  --- @nodiscard
+  local function printable(key)
+    return key >= 33 and key <= 126
+  end
+
+  --- @param key integer
+  --- @return integer, boolean
+  --- @nodiscard
+  local function lower(key)
+    if key >= 65 and key <= 90 then -- A-Z
+      return key - 65 + 97, true -- Make it lowercase: k - 'A' + 'a'.
+    end
+    return key, false
+  end
+
+  local left_mouse = vim.keycode "<LeftMouse>"
+  local left_release = vim.keycode "<LeftRelease>"
+
+  local function handle_key(doom, key)
+    -- Special cases: unlike other terminal "keys", mouse clicks report
+    -- push/release events, so we can use their state exactly.
+    if key == left_mouse or key == left_release then
+      doom:press_key(nil)
+      doom:send_key(doomkey_fire, key == left_mouse)
+      doom:schedule_check()
+      return "" -- Consume the clicks.
+    end
+
+    -- I don't think CTRL is used in combination with other keys in Vanilla DOOM
+    -- (it was just used for firing), so not bothering to consider it.
+    local shift = false
+    local alt = false
+    local doomkey
+    -- Until https://github.com/neovim/neovim/issues/26575 is implemented, we
+    -- need to parse keycodes ourselves.
+    if #key == 1 and printable(key:byte()) then
+      doomkey, shift = lower(key:byte())
+    else
+      -- Easiest to parse these using the printable representation via keytrans;
+      -- it should return modifiers in uppercase, with "M" being used for Alt
+      -- (not "A", though both are supported by Nvim).
+      local keycode = fn.keytrans(key)
+      shift = keycode:find "S%-" ~= nil
+      alt = keycode:find "M%-" ~= nil
+      key = keycode:match ".*[-<](.+)>" or keycode
+      if #key == 1 and printable(key:byte()) then
+        doomkey, _ = lower(key:byte()) -- Shift was set from keycode modifiers.
+      else
+        key = vim.keycode(("<%s>"):format(key))
+        doomkey = special_to_doomkey[key]
+        if not doomkey and #key == 1 then
+          doomkey = key:byte()
+        end
+      end
+    end
+    if not doomkey then
+      return
+    elseif doomkey == 120 then -- x
+      -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only
+      -- available as a modifier to other keys), so use X.
+      -- TODO: consider doing this by setting the config variable for firing,
+      -- though we'll want to move LMB handling to use a mouse click rather than
+      -- sending the fire key to avoid breaking it.
+      doomkey = doomkey_fire
+    end
+
+    if
+      doom.pressed_key
+      and doomkey >= doomkey_leftarrow
+      and doom.pressed_key.shift == shift
+      and doom.pressed_key.alt == alt
+    then
+      -- If the arrow key in the opposite direction was active, just cancel it.
+      -- This allows for more precise movement in the terminal.
+      local opposite_arrow_doomkey = (doomkey - doomkey_leftarrow + 2) % 4
+        + doomkey_leftarrow
+      if doom.pressed_key.key == opposite_arrow_doomkey then
+        doom:press_key(nil)
+        doom:schedule_check()
+        return "" -- Nom.
+      end
+    end
+
+    doom:press_key {
+      key = doomkey,
+      shift = shift,
+      alt = alt,
+      release_time = uv.now() + 375,
+    }
+    doom:schedule_check()
+    return "" -- We handled the key, so eat it (yum!)
+  end
+
+  local ctrl_bs = vim.keycode "<C-Bslash>"
+  local ctrl_n = vim.keycode "<C-N>"
+  local ctrl_o = vim.keycode "<C-O>"
+
+  vim.on_key(function(key, _)
+    if api.nvim_get_mode().mode ~= "t" then
+      return
+    end
+    local doom = screen_buf_to_doom[api.nvim_get_current_buf()]
+    if not doom or doom.closed then
+      return
+    end
+    -- Keys modifiers may not be simplified in Terminal mode (e.g: ^\ received
+    -- as K_SPECIAL ... KS_MODIFIER MOD_MASK_CTRL \) as a consequence of
+    -- implementing kitty keyboard protocol support; simplify them.
+    key = vim.keycode(fn.keytrans(key))
+    if key == ctrl_bs or key == ctrl_n or key == ctrl_o then
+      return -- May be used to leave Terminal mode; don't intercept.
+    end
+
+    -- Bubbling up the error will cause on_key to unregister our callback, which
+    -- is bad as we only register it once, so don't do that.
+    local ok, rv = pcall(doom.close_on_err, doom, handle_key, doom, key)
+    return ok and rv or nil
+  end, ns)
+end
+
 --- @class HlExtmark
 --- @field id integer
 --- @field hl string
@@ -178,6 +344,8 @@ function Console:plugin_print(text, hl)
 end
 
 --- @class Screen
+--- @field doom Doom
+--- @field title string?
 --- @field resx integer
 --- @field resy integer
 --- @field pixels string?
@@ -192,13 +360,14 @@ end
 --- @field height integer?
 local Screen = {}
 
+--- @param doom Doom
 --- @param resx integer
 --- @param resy integer
---- @param term_input_cb fun(_: string, term: integer, buf: integer, data: string)?
---- @param buf_name string?
 --- @return Screen
-function Screen.new(resx, resy, term_input_cb, buf_name)
+--- @nodiscard
+function Screen.new(doom, resx, resy)
   local screen = setmetatable({
+    doom = doom,
     resx = resx,
     resy = resy,
     blend = true,
@@ -206,16 +375,29 @@ function Screen.new(resx, resy, term_input_cb, buf_name)
 
   local function create_ui()
     -- It's possible we were closed beforehand if this operation was scheduled.
-    if screen.closed then
+    if screen.closed or doom.closed then
       return
     end
 
     screen.buf = api.nvim_create_buf(true, true)
-    if buf_name then
-      api.nvim_buf_set_name(screen.buf, buf_name)
-    end
+    api.nvim_buf_set_name(
+      screen.buf,
+      ("actually-doom://screen//%d"):format(doom.process.pid)
+    )
+    screen_buf_to_doom[screen.buf] = doom
+
     screen.term_chan = api.nvim_open_term(screen.buf, {
-      on_input = term_input_cb,
+      on_input = doom:close_on_err_wrap(function(_, _, _, data)
+        local lines, columns = data:match "^\27%[(%d+);(%d+)R$"
+        if lines then
+          -- Cursor position report (DSR-CPR) requested by Screen.redraw to get
+          -- the current size of the terminal.
+          --- @cast lines string
+          --- @cast columns string
+          screen.width = tonumber(columns)
+          screen.height = tonumber(lines)
+        end
+      end),
       force_crlf = false,
     })
     -- Hide the cursor, disable line wrapping.
@@ -267,16 +449,12 @@ function Screen:close()
     return
   end
 
-  if self.buf and api.nvim_buf_is_valid(self.buf) then
-    api.nvim_buf_delete(self.buf, { force = true })
+  if self.buf then
+    screen_buf_to_doom[self.buf] = nil
+    if api.nvim_buf_is_valid(self.buf) then
+      api.nvim_buf_delete(self.buf, { force = true })
+    end
   end
-end
-
---- @param x integer (0-based)
---- @param y integer (0-based)
---- @return integer (0-based)
-function Screen:pixel_index(x, y)
-  return (y * self.resx + x) * 3
 end
 
 do
@@ -293,6 +471,7 @@ do
   --- @param g integer
   --- @param b integer
   --- @return integer
+  --- @nodiscard
   local function rgb_to_xterm256(r, g, b)
     local cache_key = b + (g * 256) + (r * 65536)
     if xterm_colour_cache[cache_key] then
@@ -301,6 +480,7 @@ do
 
     --- @param x integer
     --- @return integer
+    --- @nodiscard
     local function nearest_cube_idx(x)
       local min_diff = math.abs(x - cube_levels[1])
       for i = 2, #cube_levels do
@@ -319,6 +499,7 @@ do
     --- @param b2 integer
     --- @param g2 integer
     --- @return integer
+    --- @nodiscard
     local function dist_sq(r2, g2, b2)
       return (r - r2) ^ 2 + (g - g2) ^ 2 + (b - b2) ^ 2
     end
@@ -375,6 +556,7 @@ do
       --- @param x integer (0-indexed)
       --- @param y integer (0-indexed)
       --- @return integer, integer (0-indexed)
+      --- @nodiscard
       local function pixel_topleft_pos(x, y)
         local pix_x =
           math.min(math.floor((x / self.width) * self.resx), self.resx)
@@ -452,17 +634,18 @@ do
   end
 end
 
---- @param pixels string?
-function Screen:set_pixels(pixels)
-  self.pixels = pixels
-  self:redraw()
+--- @param x integer (0-based)
+--- @param y integer (0-based)
+--- @return integer (0-based)
+--- @nodiscard
+function Screen:pixel_index(x, y)
+  return (y * self.resx + x) * 3
 end
 
---- @param doom Doom?
-function Screen:update_title(doom)
+function Screen:update_title()
   if vim.in_fast_event() or not self.win then
     vim.schedule(function()
-      self:update_title(doom)
+      self:update_title()
     end)
     return
   end
@@ -471,15 +654,19 @@ function Screen:update_title(doom)
     api.nvim_win_set_config(self.win, {
       title = {
         { " " },
-        { doom and doom.title or "DOOM" },
+        { self.title or "DOOM" },
         { " " },
-        { doom and doom.shift_pressed and " Shift " or "", "CursorLine" },
-        { doom and doom.alt_pressed and " Alt " or "", "CursorLine" },
       },
       title_pos = "center",
     })
   end
 end
+
+--- @class PressedKey
+--- @field key integer
+--- @field shift boolean
+--- @field alt boolean
+--- @field release_time integer
 
 --- @class Doom
 --- @field console Console
@@ -487,10 +674,7 @@ end
 --- @field sock uv.uv_pipe_t
 --- @field send_buf StrBuf
 --- @field check_timer uv.uv_timer_t
---- @field title string?
---- @field pending_key_releases table<integer, integer>
---- @field shift_pressed boolean?
---- @field alt_pressed boolean?
+--- @field pressed_key PressedKey?
 --- @field screen Screen?
 --- @field closed boolean?
 local Doom = {}
@@ -505,21 +689,16 @@ end
 --- @param ms integer? If nil, schedule for the next event loop iteration.
 function Doom:schedule_check(ms)
   local function check_cb()
-    local now = uv.now()
     local next_sched_time = math.huge
-    local released_keys = {}
-    for doomkey, release_time in pairs(self.pending_key_releases) do
-      if now >= release_time then
-        self:send_key(doomkey, false)
-        -- Don't remove the released key entries yet; it might mess up pairs'
-        -- iteration order.
-        released_keys[#released_keys + 1] = doomkey
+    local now = uv.now()
+
+    if self.pressed_key then
+      if now >= self.pressed_key.release_time then
+        self:press_key(nil)
       else
-        next_sched_time = math.min(next_sched_time, release_time)
+        next_sched_time =
+          math.min(next_sched_time, self.pressed_key.release_time)
       end
-    end
-    for _, doomkey in ipairs(released_keys) do
-      self.pending_key_releases[doomkey] = nil
     end
 
     self:flush_send()
@@ -541,6 +720,33 @@ end
 function Doom:send_key(doomkey, pressed)
   -- CMSG_PRESS_KEY
   self.send_buf:put("\1", string.char(doomkey), pressed and "\1" or "\0")
+end
+
+--- @param info PressedKey?
+function Doom:press_key(info)
+  if self.pressed_key then
+    if not info or self.pressed_key.key ~= info.key then
+      self:send_key(self.pressed_key.key, false)
+    end
+    if not info or self.pressed_key.shift ~= info.shift then
+      self:send_key(doomkey_rshift, false)
+    end
+    if not info or self.pressed_key.alt ~= info.alt then
+      self:send_key(doomkey_ralt, false)
+    end
+    self.pressed_key = nil
+  end
+
+  if info then
+    self:send_key(info.key, true)
+    if info.shift then
+      self:send_key(doomkey_rshift, true)
+    end
+    if info.alt then
+      self:send_key(doomkey_ralt, true)
+    end
+    self.pressed_key = info
+  end
 end
 
 function Doom:flush_send()
@@ -611,111 +817,10 @@ local function init_process(doom, sock_path)
   doom.console:plugin_print(("DOOM started as PID %d\n\n"):format(sys_rv.pid))
 end
 
---- @type fun(doom: Doom, _: string, chan: integer, buf: integer, data: string)
-local term_input_cb
-do
-  local to_doomkey = {
-    -- Single characters use their numeric values as the table key.
-    [32] = 162, -- Space; KEY_USE
-    [120] = 163, -- x; KEY_FIRE
-
-    -- Escape sequences (and multi-characters) use strings as the table key.
-    -- These don't take into account modifiers, but maybe they should.
-    ["\27[A"] = 173, -- KEY_UPARROW
-    ["\27[B"] = 175, -- KEY_DOWNARROW
-    ["\27[C"] = 174, -- KEY_RIGHTARROW
-    ["\27[D"] = 172, -- KEY_LEFTARROW
-    ["\27OP"] = 187, -- KEY_F1
-    ["\27OQ"] = 188, -- KEY_F2
-    ["\27OR"] = 189, -- KEY_F3
-    ["\27OS"] = 190, -- KEY_F4
-    ["\27[15~"] = 191, -- KEY_F5
-    ["\27[17~"] = 192, -- KEY_F6
-    ["\27[18~"] = 193, -- KEY_F7
-    ["\27[19~"] = 194, -- KEY_F8
-    ["\27[20~"] = 195, -- KEY_F9
-    ["\27[21~"] = 196, -- KEY_F10
-    ["\27[23~"] = 215, -- KEY_F11
-    ["\27[24~"] = 216, -- KEY_F12
-    ["\27[H"] = 199, -- KEY_HOME
-    ["\27[5~"] = 201, -- KEY_PGUP
-    ["\27[6~"] = 209, -- KEY_PGDN
-  }
-
-  term_input_cb = function(doom, _, _, _, data)
-    local lines, columns = data:match "^\27%[(%d+);(%d+)R$"
-    if lines then
-      -- Cursor position report (DSR-CPR); requested by Screen.redraw to get the
-      -- size of the terminal.
-      --- @cast lines string
-      --- @cast columns string
-      doom.screen.width = tonumber(columns)
-      doom.screen.height = tonumber(lines)
-      return
-    end
-
-    local doomkey
-    if #data == 1 and data:byte() < 128 then
-      doomkey = data:byte()
-      -- Make uppercase A-Z lowercase.
-      if doomkey >= 65 and doomkey <= 90 then
-        doomkey = doomkey - 65 + 97 -- key - 'A' + 'a'
-      end
-      -- Default to the read key.
-      doomkey = to_doomkey[doomkey] or doomkey
-    else
-      doomkey = to_doomkey[data]
-    end
-
-    if doomkey then
-      -- As terminals don't typically support figuring out whether *just*
-      -- Alt/Shift alone is pressed, make them toggleable via different keys.
-      if doomkey == 97 then -- a
-        doom.alt_pressed = not doom.alt_pressed
-        doom:send_key(184, doom.alt_pressed) -- KEY_RALT
-        vim.schedule(function()
-          doom.screen:update_title(doom)
-        end)
-      elseif doomkey == 122 then -- z
-        doom.shift_pressed = not doom.shift_pressed
-        doom:send_key(182, doom.shift_pressed) -- KEY_RSHIFT
-        vim.schedule(function()
-          doom.screen:update_title(doom)
-        end)
-      else
-        -- Press other keys for a time before automatically releasing them.
-        -- When https://github.com/neovim/neovim/issues/27509 lands with the
-        -- kitty keyboard protocol key press/release events support, we won't
-        -- need to do this for supported terminals.
-
-        -- Reduce push time if Shift is pressed (as it speeds up movement) or
-        -- when firing.
-        local ms = 375
-        if doom.shift_pressed or doomkey == 163 then -- KEY_FIRE
-          ms = 250
-        end
-        doom:send_key(doomkey, true)
-        doom.pending_key_releases[doomkey] = uv.now() + ms
-      end
-
-      doom:schedule_check()
-      return
-    end
-
-    -- Schedule to avoid textlock.
-    vim.schedule(function()
-      doom.console:plugin_print(
-        ('Unhandled terminal input: "%s"\n'):format(data),
-        "Comment"
-      )
-    end)
-  end
-end
-
 --- @param doom Doom
 --- @param buf StrBuf
 local function recv_msg_loop(doom, buf)
-  --- @param n integer
+  --- @param n integer (0 gives an empty string)
   --- @return string
   local function read_bytes(n)
     while n > #buf do
@@ -767,14 +872,7 @@ local function recv_msg_loop(doom, buf)
     return
   end
 
-  doom.screen = Screen.new(
-    resx,
-    resy,
-    doom:close_on_err_wrap(function(...)
-      return term_input_cb(doom, ...)
-    end),
-    ("actually-doom://screen//%d"):format(doom.process.pid)
-  )
+  doom.screen = Screen.new(doom, resx, resy)
   doom:send_frame_request()
   doom:schedule_check()
 
@@ -783,19 +881,20 @@ local function recv_msg_loop(doom, buf)
     -- AMSG_FRAME
     [0] = function()
       local len = doom.screen:pixel_index(0, doom.screen.resy)
-      doom.screen:set_pixels(read_bytes(len))
+      doom.screen.pixels = read_bytes(len)
+      doom.screen:redraw()
       doom:send_frame_request()
       doom:schedule_check()
     end,
 
     -- AMSG_SET_TITLE
     [1] = function()
-      doom.title = read_string()
+      doom.screen.title = read_string()
       doom.console:plugin_print(
-        ('AMSG_SET_TITLE: title="%s"\n'):format(doom.title),
+        ('AMSG_SET_TITLE: title="%s"\n'):format(doom.screen.title),
         "Comment"
       )
-      doom.screen:update_title(doom)
+      doom.screen:update_title()
     end,
   }
 
@@ -897,7 +996,6 @@ function Doom.run()
     check_timer = assert(uv.new_timer()),
     send_buf = StrBuf.new(256),
     console = Console.new(),
-    pending_key_releases = {},
   }, { __index = Doom })
 
   local sock_path = ("/run/user/%d/actually-doom.%d.%d"):format(
@@ -967,6 +1065,7 @@ end
 function Doom:close_on_err(f, ...)
   --- Allows us to return multiple values from `f`.
   --- @return integer, table
+  --- @nodiscard
   local function pack(...)
     return select("#", ...), { ... }
   end

@@ -1,4 +1,6 @@
 # High priority
+- [ ] Add a AMSG_QUIT type for graceful shutdowns of the server (avoids
+  CONNRESET message in console).
 - [ ] Quit the DOOM process when closing the screen or console or something.
 - [ ] Try to quit the DOOM process cleanly when Nvim is exiting, rather than
   brutally murdering it via SIGKILL.
@@ -7,6 +9,7 @@
   inputs...
 - [ ] Figure out why the screen melt effect is broken after the change that made
   frame rendering be officiated by the client.
+- [ ] Pause the game when DOOM is unfocused. (Send KEY_PAUSE)
 - [ ] Don't bother requesting frames when the screen window is hidden.
   (Currently, we just don't bother sending to the terminal)
 - [ ] Hide the left/right or bottom borders if the screen float meets the
