@@ -1,13 +1,13 @@
 # High priority
-- [ ] Quit the DOOM process when closing the screen or console or something.
 - [ ] Try to quit the DOOM process cleanly when Nvim is exiting, rather than
   brutally murdering it via SIGKILL.
 - [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
   Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
   inputs...
-- [ ] Figure out why the screen melt effect is broken after the change that made
-  frame rendering be officiated by the client.
-- [ ] Pause the game when DOOM is unfocused. (Send KEY_PAUSE)
+- [ ] Screen melt effect drives its own loop outside of the tick logic, causing
+  messages to not be processed and for it to not be displayed. Fix it.
+- [ ] Pause and tell the game to stop drawing when DOOM is unfocused. (Send
+  KEY_PAUSE and unset screenvisible)
 - [ ] Don't bother requesting frames when the screen window is hidden.
   (Currently, we just don't bother sending to the terminal)
 - [ ] Hide the left/right or bottom borders if the screen float meets the

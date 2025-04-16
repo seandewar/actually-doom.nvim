@@ -28,6 +28,7 @@ local script_dir = (function()
 end)()
 
 local ns = api.nvim_create_namespace "actually-doom"
+local augroup = api.nvim_create_augroup("actually-doom", {})
 
 --- @type table<integer, Doom>
 local screen_buf_to_doom = {}
@@ -676,6 +677,7 @@ end
 --- @field check_timer uv.uv_timer_t
 --- @field pressed_key PressedKey?
 --- @field screen Screen?
+--- @field close_autocmd integer
 --- @field closed boolean?
 local Doom = {}
 
@@ -1021,6 +1023,16 @@ function Doom.run()
   end
 
   doom:close_on_err(function()
+    doom.close_autocmd = api.nvim_create_autocmd("BufUnload", {
+      group = augroup,
+      callback = vim.schedule_wrap(function(args)
+        if args.buf == doom.console.buf or args.buf == doom.screen.buf then
+          doom:close()
+          return true -- Delete this autocmd.
+        end
+      end),
+    })
+
     doom.console:set_buf_name(
       ("actually-doom://console//%d"):format(doom.process.pid)
     )
@@ -1052,6 +1064,15 @@ function Doom:close(close_console)
   end
   if self.process then
     self.process:kill "sigterm" -- Try a clean shutdown.
+  end
+  if self.close_autocmd then
+    if vim.in_fast_event() then
+      vim.schedule(function()
+        api.nvim_del_autocmd(self.close_autocmd)
+      end)
+    else
+      api.nvim_del_autocmd(self.close_autocmd)
+    end
   end
   if self.screen then
     self.screen:close()
@@ -1112,11 +1133,12 @@ function Doom:close_on_err_wrap(f)
   end
 end
 
---- @return Doom
+--- @return Doom?
 function M.play()
   local ok, rv = pcall(Doom.run)
   if not ok then
     api.nvim_echo({ { rv } }, true, { err = true })
+    return nil
   end
   return rv
 end
