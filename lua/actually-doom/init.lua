@@ -876,7 +876,7 @@ local function recv_msg_loop(doom, buf)
   doom:send_frame_request()
   doom:schedule_check()
 
-  --- @type table<integer, fun()>
+  --- @type table<integer, fun(): boolean?>
   local msg_handlers = {
     -- AMSG_FRAME
     [0] = function()
@@ -896,13 +896,22 @@ local function recv_msg_loop(doom, buf)
       )
       doom.screen:update_title()
     end,
+
+    -- AMSG_QUIT
+    [2] = function()
+      doom.console:plugin_print "DOOM process disconnected; quitting\n"
+      doom:close()
+      return true -- Quit receive loop.
+    end,
   }
 
   while true do
     local msg_type = read8()
     local handler = msg_handlers[msg_type]
     if handler then
-      handler()
+      if handler() then
+        return -- Handlers can return truthy to quit the loop.
+      end
     else
       doom.console:plugin_print(
         ("Received unknown message type: %d; quitting\n"):format(msg_type),

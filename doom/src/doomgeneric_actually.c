@@ -33,6 +33,9 @@ enum {
 
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
+
+    // AMSG_QUIT (no payload)
+    AMSG_QUIT = 2,
 };
 
 // Incoming message types from the client. Same properties as above.
@@ -58,6 +61,16 @@ static struct {
 
 static uint32_t clock_start_ms;
 static volatile sig_atomic_t interrupted;
+
+static boolean comm_writing_msg;
+
+#define COMM_WRITE_MSG(block)      \
+    do {                           \
+        assert(!comm_writing_msg); \
+        comm_writing_msg = true;   \
+        block;                     \
+        comm_writing_msg = false;  \
+    } while (0)
 
 // Only used for received comms and buffered key state changes, so size doesn't
 // need to be high. Keep this a power of 2 to make wrapping fast (compiler can
@@ -162,6 +175,7 @@ static void Comm_FlushSend(boolean closing)
 
 static void Comm_Write8(uint8_t v)
 {
+    assert(comm_writing_msg);
     if (comm_send_buf.len == COMM_WRITE_BUF_CAP)
         Comm_FlushSend(false);
 
@@ -170,6 +184,7 @@ static void Comm_Write8(uint8_t v)
 
 static void Comm_Write16(uint16_t v)
 {
+    assert(comm_writing_msg);
     if (comm_send_buf.len + 2 > COMM_WRITE_BUF_CAP)
         Comm_FlushSend(false);
 
@@ -179,6 +194,7 @@ static void Comm_Write16(uint16_t v)
 
 static void Comm_Write24(uint32_t v)
 {
+    assert(comm_writing_msg);
     if (comm_send_buf.len + 3 > COMM_WRITE_BUF_CAP)
         Comm_FlushSend(false);
 
@@ -189,6 +205,7 @@ static void Comm_Write24(uint32_t v)
 
 static void Comm_Write32(uint32_t v)
 {
+    assert(comm_writing_msg);
     if (comm_send_buf.len + 4 > COMM_WRITE_BUF_CAP)
         Comm_FlushSend(false);
 
@@ -200,6 +217,8 @@ static void Comm_Write32(uint32_t v)
 
 static void Comm_WriteBytes(const char *p, size_t len)
 {
+    assert(comm_writing_msg);
+
     while (true) {
         size_t free_len = COMM_WRITE_BUF_CAP - comm_send_buf.len;
         size_t copy_len = len <= free_len ? len : free_len;
@@ -219,6 +238,8 @@ static void Comm_WriteBytes(const char *p, size_t len)
 
 static void Comm_WriteString(const char *s)
 {
+    assert(comm_writing_msg);
+
     size_t len = strlen(s);
     if (len > UINT16_MAX) {
         fprintf(stderr,
@@ -425,11 +446,17 @@ static void CloseSockets(void)
 {
     CloseListenSocket();
 
-    Comm_FlushSend(true);
-    if (comm_sock_fd >= 0 && close(comm_sock_fd) == -1) {
-        fprintf(stderr,
-                LOG_PRE "Warning: Failed to close communications socket: %s\n",
-                strerror(errno));
+    if (comm_sock_fd >= 0) {
+        if (!comm_writing_msg)
+            COMM_WRITE_MSG(Comm_Write8(AMSG_QUIT));
+        Comm_FlushSend(true);
+
+        if (close(comm_sock_fd) == -1) {
+            fprintf(stderr,
+                    LOG_PRE
+                    "Warning: Failed to close communications socket: %s\n",
+                    strerror(errno));
+        }
     }
 
     comm_sock_fd = -1;
@@ -530,9 +557,11 @@ void DG_Init(void)
     clock_start_ms = GetClockMs();
 
     // "AMSG_INIT": proto_version: u32, resx: u16, resy: u16
-    Comm_Write32(AMSG_PROTO_VERSION);
-    Comm_Write16(DOOMGENERIC_RESX);
-    Comm_Write16(DOOMGENERIC_RESY);
+    COMM_WRITE_MSG({
+        Comm_Write32(AMSG_PROTO_VERSION);
+        Comm_Write16(DOOMGENERIC_RESX);
+        Comm_Write16(DOOMGENERIC_RESY);
+    });
 }
 
 void DG_DrawFrame(void)
@@ -540,10 +569,11 @@ void DG_DrawFrame(void)
     if (!client_wants_frame)
         return;
 
-    Comm_Write8(AMSG_FRAME);
-    for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
-        Comm_Write24(DG_ScreenBuffer[i]);
-
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FRAME);
+        for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
+            Comm_Write24(DG_ScreenBuffer[i]);
+    });
     client_wants_frame = false;
 }
 
@@ -589,6 +619,8 @@ uint32_t DG_GetTicksMs(void)
 
 void DG_SetWindowTitle(const char *title)
 {
-    Comm_Write8(AMSG_SET_TITLE);
-    Comm_WriteString(title);
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_SET_TITLE);
+        Comm_WriteString(title);
+    });
 }

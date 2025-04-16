@@ -1,6 +1,4 @@
 # High priority
-- [ ] Add a AMSG_QUIT type for graceful shutdowns of the server (avoids
-  CONNRESET message in console).
 - [ ] Quit the DOOM process when closing the screen or console or something.
 - [ ] Try to quit the DOOM process cleanly when Nvim is exiting, rather than
   brutally murdering it via SIGKILL.
