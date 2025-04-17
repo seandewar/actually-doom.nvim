@@ -1,13 +1,7 @@
 # High priority
-- [ ] Try to quit the DOOM process cleanly when Nvim is exiting, rather than
-  brutally murdering it via SIGKILL.
 - [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
   Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
   inputs...
-- [ ] Pause and tell the game to stop drawing when DOOM is unfocused. (Send
-  KEY_PAUSE and unset screenvisible)
-- [ ] Don't bother requesting frames when the screen window is hidden.
-  (Currently, we just don't bother sending to the terminal)
 - [ ] Hide the left/right or bottom borders if the screen float meets the
   appropriate edge of the editor screen (keep the top border though for the
   title); we want all the room we can get!

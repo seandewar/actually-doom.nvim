@@ -12,6 +12,7 @@
 
 #include "doomgeneric.h"
 #include "i_system.h"
+#include "i_video.h"
 #include "m_argv.h"
 
 // Bump after a breaking change to the messaging protocol.
@@ -87,7 +88,6 @@ typedef struct {
 
 static ringbuf_t comm_recv_buf;
 static ringbuf_t key_buf;
-static boolean client_wants_frame;
 
 static void SigintHandler(int signum)
 {
@@ -280,7 +280,7 @@ static void Comm_HandleReceivedMsgs(void)
         switch (state.msg_type) {
         case CMSG_WANT_FRAME:
             // No payload.
-            client_wants_frame = true;
+            screenvisible = true;
             break;
 
         case CMSG_PRESS_KEY:
@@ -413,13 +413,11 @@ int main(int argc, char **argv)
     }
 
     doomgeneric_Create(argc, argv);
-    while (!interrupted) {
+    while (true) {
         Comm_FlushSend(false);
         Comm_Receive();
         doomgeneric_Tick();
     }
-
-    I_Quit();
 }
 
 void DG_WipeTick(void)
@@ -575,15 +573,12 @@ void DG_Init(void)
 
 void DG_DrawFrame(void)
 {
-    if (!client_wants_frame)
-        return;
-
     COMM_WRITE_MSG({
         Comm_Write8(AMSG_FRAME);
         for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
             Comm_Write24(DG_ScreenBuffer[i]);
     });
-    client_wants_frame = false;
+    screenvisible = false;
 }
 
 int DG_GetKey(int *pressed, unsigned char *key)

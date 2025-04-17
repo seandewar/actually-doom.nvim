@@ -388,8 +388,10 @@ local function recv_msg_loop(doom, buf)
   end
 
   doom.screen = require("actually-doom.ui").Screen.new(doom, resx, resy)
-  doom:send_frame_request()
-  doom:schedule_check()
+  if doom.screen.visible then
+    doom:send_frame_request()
+    doom:schedule_check()
+  end
 
   --- @type table<integer, fun(): boolean?>
   local msg_handlers = {
@@ -397,9 +399,11 @@ local function recv_msg_loop(doom, buf)
     [0] = function()
       local len = doom.screen:pixel_index(0, doom.screen.resy)
       doom.screen.pixels = read_bytes(len)
-      doom.screen:redraw()
-      doom:send_frame_request()
-      doom:schedule_check()
+      if doom.screen.visible then
+        doom.screen:redraw()
+        doom:send_frame_request()
+        doom:schedule_check()
+      end
     end,
 
     -- AMSG_SET_TITLE
@@ -567,6 +571,8 @@ function Doom:close(close_console_win)
   if self.process then
     self.process:kill "sigterm" -- Try a clean shutdown.
   end
+  -- Close console before the screen so it doesn't print the "buffer was
+  -- unloaded" message from us closing the screen.
   if self.console then
     self.console:close(close_console_win)
   end

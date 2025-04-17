@@ -54,6 +54,47 @@ do
   end, ns)
 end
 
+-- In the case where a window switches its buffer, it would be nice to use
+-- BufWin{Enter,Leave} instead of BufEnter,WinClosed with simplified logic, but
+-- as they rely on the buffer's hidden state they're (unfortunately) influenced
+-- by windows in other tabpages.
+api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
+  group = augroup,
+  callback = function(args)
+    if vim.tbl_isempty(screen_buf_to_doom) then
+      return
+    end
+    local bufs
+    if args.event == "WinClosed" then
+      local win = assert(tonumber(args.match))
+      -- Map windows to their current buffers in-place, skipping the closing
+      -- window (without pointlessly creating a new table like vim.tbl_map).
+      bufs = api.nvim_tabpage_list_wins(0)
+      for i, w in ipairs(bufs) do
+        bufs[i] = w ~= win and api.nvim_win_get_buf(w) or -1
+      end
+    else
+      bufs = fn.tabpagebuflist()
+    end
+
+    for buf, doom in pairs(screen_buf_to_doom) do
+      if not doom.closed then
+        local old_visible = doom.screen.visible
+        doom.screen.visible = vim.list_contains(bufs, buf)
+
+        if not old_visible and doom.screen.visible then
+          doom.console:plugin_print("Game visible; redraws ON\n", "Comment")
+          doom:send_frame_request()
+          doom:schedule_check()
+          doom.screen:redraw()
+        elseif old_visible and not doom.screen.visible then
+          doom.console:plugin_print("Game hidden; redraws OFF\n", "Comment")
+        end
+      end
+    end
+  end,
+})
+
 --- @class HlExtmark
 --- @field id integer
 --- @field hl string
@@ -245,6 +286,7 @@ end
 --- @field pixels string?
 --- @field blend boolean?
 --- @field redraw_scheduled boolean?
+--- @field visible boolean?
 ---
 --- @field closed boolean?
 --- @field buf integer?
@@ -445,7 +487,7 @@ do
   local buf = require("string.buffer").new() -- Reuse allocation if possible.
 
   function Screen:redraw()
-    if not self.term_chan then
+    if not self.visible or not self.term_chan then
       return
     end
     if vim.in_fast_event() then
@@ -457,10 +499,6 @@ do
         end)
       end
       return
-    end
-    if fn.bufwinnr(self.buf) == -1 then
-      -- TODO: even better if we don't request frames at all in this case
-      return -- Buffer not shown in this tabpage.
     end
 
     if self.pixels then
