@@ -422,6 +422,15 @@ int main(int argc, char **argv)
     I_Quit();
 }
 
+void DG_WipeTick(void)
+{
+    // Screen wipes loop within D_Display, which means we should probably limit
+    // this function to simple actions and defer messages that may change game
+    // state and such.
+    Comm_FlushSend(false);
+    Comm_Receive();
+}
+
 static void CloseListenSocket(void)
 {
     if (listen_sock_fd >= 0 && close(listen_sock_fd) == -1) {

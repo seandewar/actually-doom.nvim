@@ -4,8 +4,6 @@
 - [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
   Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
   inputs...
-- [ ] Screen melt effect drives its own loop outside of the tick logic, causing
-  messages to not be processed and for it to not be displayed. Fix it.
 - [ ] Pause and tell the game to stop drawing when DOOM is unfocused. (Send
   KEY_PAUSE and unset screenvisible)
 - [ ] Don't bother requesting frames when the screen window is hidden.

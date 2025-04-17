@@ -30,6 +30,7 @@
 #include "d_loop.h"
 #include "d_main.h"
 #include "doomdef.h"
+#include "doomgeneric.h"
 #include "doomstat.h"
 #include "f_finale.h"
 #include "f_wipe.h"
@@ -286,6 +287,8 @@ void D_Display(void)
         } while (tics <= 0);
 
         wipestart = nowtime;
+        DG_WipeTick();
+
         done =
             wipe_ScreenWipe(wipe_Melt, 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
         I_UpdateNoBlit();
