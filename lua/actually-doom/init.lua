@@ -426,6 +426,21 @@ function Screen.new(doom, resx, resy)
     })
     api.nvim_set_option_value("winfixbuf", true, { win = screen.win })
     api.nvim_set_option_value("wrap", false, { win = screen.win })
+    api.nvim_create_autocmd("WinClosed", {
+      group = augroup,
+      once = true,
+      pattern = tostring(screen.win),
+      callback = function(_)
+        -- Pretty clear it's from this plugin, so don't bother with the
+        -- "[actually-doom.nvim]" prefix; helps avoid hit-ENTER prompts anyway.
+        print(
+          (
+            'DOOM is still running! Use ":tab %dsb" and type "i" to resume, '
+            .. 'or ":%dbd!" to quit'
+          ):format(screen.buf, screen.buf)
+        )
+      end,
+    })
 
     screen:update_title()
     screen:redraw()
@@ -433,7 +448,7 @@ function Screen.new(doom, resx, resy)
   end
   -- If in a fast context, we can't create the UI immediately.
   if vim.in_fast_event() then
-    vim.schedule(create_ui)
+    vim.schedule(doom:close_on_err_wrap(create_ui))
   else
     create_ui()
   end
@@ -816,7 +831,11 @@ local function init_process(doom, sock_path)
   end
   doom.process = sys_rv
 
-  doom.console:plugin_print(("DOOM started as PID %d\n\n"):format(sys_rv.pid))
+  doom.console:plugin_print(
+    ("DOOM started as PID %d\n"):format(sys_rv.pid)
+      .. "To forcefully quit DOOM, unload the console or screen buffer "
+      .. '(e.g: ":bunload!", ":bdelete!", ":bwipeout!")\n\n'
+  )
 end
 
 --- @param doom Doom
@@ -1027,8 +1046,9 @@ function Doom.run()
       group = augroup,
       callback = vim.schedule_wrap(function(args)
         if args.buf == doom.console.buf or args.buf == doom.screen.buf then
+          doom.console:plugin_print "Game buffer was unloaded; quitting\n"
           doom:close()
-          return true -- Delete this autocmd.
+          return true -- Delete this autocmd (close should've done that anyway)
         end
       end),
     })
