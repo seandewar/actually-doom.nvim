@@ -536,9 +536,8 @@ function Doom.run()
   end
 
   doom:close_on_err(function()
-    doom.console:set_buf_name(
-      ("actually-doom://console//%d"):format(doom.process.pid)
-    )
+    doom.console.doom = doom
+    doom.console:update_buf_name()
     local console_wins = fn.win_findbuf(doom.console.buf)
     if #console_wins > 0 then
       api.nvim_set_current_win(console_wins[1])

@@ -61,6 +61,7 @@ end
 --- @field start_col integer 0-indexed.
 
 --- @class Console
+--- @field doom Doom?
 --- @field buf integer
 --- @field last_row integer 0-indexed.
 --- @field last_col integer 0-indexed.
@@ -72,11 +73,13 @@ local Console = {}
 --- @return Console
 --- @nodiscard
 function Console.new(doom)
-  local console = {
+  local console = setmetatable({
+    doom = doom,
     last_row = 0,
     last_col = 0,
     buf = api.nvim_create_buf(true, true),
-  }
+  }, { __index = Console })
+  console:update_buf_name()
   api.nvim_set_option_value("modifiable", false, { buf = console.buf })
 
   if doom then
@@ -98,8 +101,7 @@ function Console.new(doom)
     -- We'll choose when to enter the new tabpage.
     api.nvim_set_current_win(save_curwin)
   end
-
-  return setmetatable(console, { __index = Console })
+  return console
 end
 
 --- @param close_win boolean?
@@ -119,17 +121,31 @@ function Console:close(close_win)
   end
 end
 
---- @param name string
-function Console:set_buf_name(name)
+function Console:update_buf_name()
   if vim.in_fast_event() then
     vim.schedule(function()
-      self:set_buf_name(name)
+      self:update_buf_name()
     end)
     return
   end
 
   if api.nvim_buf_is_valid(self.buf) then
-    api.nvim_buf_set_name(self.buf, name)
+    local old_name = api.nvim_buf_get_name(self.buf)
+    local new_name = ("actually-doom://console//%d"):format(self.buf)
+    if self.doom and self.doom.process then
+      new_name = ("%s:%d"):format(new_name, self.doom.process.pid)
+    end
+
+    if new_name ~= old_name then
+      api.nvim_buf_set_name(self.buf, new_name)
+      if old_name ~= "" then
+        -- Wipeout the (alternate) buffer that now holds the old name.
+        local old_name_buf = fn.bufnr(("^%s$"):format(fn.fnameescape(old_name)))
+        if old_name_buf ~= -1 then
+          api.nvim_buf_delete(old_name_buf, { force = true })
+        end
+      end
+    end
   end
 end
 
