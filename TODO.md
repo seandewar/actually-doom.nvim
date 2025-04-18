@@ -1,6 +1,4 @@
 # High priority
-- [ ] Add a way to re-open the screen as a float (maybe just `:Doom` can do
-  this; change the hint message to match)
 - [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
   Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
   inputs...

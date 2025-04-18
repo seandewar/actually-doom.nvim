@@ -12,13 +12,13 @@ do
   end
 end
 
-local M = {}
+local M = {
+  --- @type table<integer, Doom>
+  screen_buf_to_doom = {},
+}
 
 local ns = api.nvim_create_namespace "actually-doom"
 local augroup = api.nvim_create_augroup("actually-doom", {})
-
---- @type table<integer, Doom>
-local screen_buf_to_doom = {}
 
 do
   local ctrl_bs = vim.keycode "<C-Bslash>"
@@ -29,7 +29,7 @@ do
     if api.nvim_get_mode().mode ~= "t" then
       return
     end
-    local doom = screen_buf_to_doom[api.nvim_get_current_buf()]
+    local doom = M.screen_buf_to_doom[api.nvim_get_current_buf()]
     if not doom or doom.closed then
       return
     end
@@ -61,7 +61,7 @@ end
 api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
   group = augroup,
   callback = function(args)
-    if vim.tbl_isempty(screen_buf_to_doom) then
+    if vim.tbl_isempty(M.screen_buf_to_doom) then
       return
     end
     local bufs
@@ -77,7 +77,7 @@ api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
       bufs = fn.tabpagebuflist()
     end
 
-    for buf, doom in pairs(screen_buf_to_doom) do
+    for buf, doom in pairs(M.screen_buf_to_doom) do
       if not doom.closed then
         local old_visible = doom.screen.visible
         doom.screen.visible = vim.list_contains(bufs, buf)
@@ -102,7 +102,7 @@ api.nvim_create_autocmd("WinLeave", {
   callback = function(_)
     local win = api.nvim_get_current_win()
     local buf = api.nvim_win_get_buf(win)
-    local doom = screen_buf_to_doom[buf]
+    local doom = M.screen_buf_to_doom[buf]
     if not doom or doom.closed or win ~= doom.screen.win then
       return
     end
@@ -149,7 +149,7 @@ api.nvim_create_autocmd({ "VimResized", "VimEnter", "TabEnter", "OptionSet" }, {
   group = augroup,
   nested = true,
   callback = function(args)
-    if vim.tbl_isempty(screen_buf_to_doom) then
+    if vim.tbl_isempty(M.screen_buf_to_doom) then
       return
     end
     -- OptionSet only relevant if &cmdheight was changed, as the float can't
@@ -159,7 +159,7 @@ api.nvim_create_autocmd({ "VimResized", "VimEnter", "TabEnter", "OptionSet" }, {
     end
 
     local tp = api.nvim_get_current_tabpage()
-    for _, doom in pairs(screen_buf_to_doom) do
+    for _, doom in pairs(M.screen_buf_to_doom) do
       if
         doom
         and not doom.closed
@@ -177,7 +177,7 @@ api.nvim_create_autocmd({ "VimResized", "VimEnter", "TabEnter", "OptionSet" }, {
 api.nvim_create_autocmd("WinResized", {
   group = augroup,
   callback = function(_)
-    if vim.tbl_isempty(screen_buf_to_doom) then
+    if vim.tbl_isempty(M.screen_buf_to_doom) then
       return
     end
 
@@ -186,7 +186,7 @@ api.nvim_create_autocmd("WinResized", {
         api.nvim_win_is_valid(win)
         and api.nvim_win_get_config(win).relative ~= "" -- Floating.
       then
-        local doom = screen_buf_to_doom[api.nvim_win_get_buf(win)]
+        local doom = M.screen_buf_to_doom[api.nvim_win_get_buf(win)]
         if doom and not doom.closed and win == doom.screen.win then
           api.nvim_win_set_config(win, new_screen_win_config())
         end
@@ -201,9 +201,12 @@ api.nvim_create_autocmd("WinClosed", {
   callback = function(args)
     local win = assert(tonumber(args.match))
     local buf = api.nvim_win_get_buf(win)
-    local doom = screen_buf_to_doom[buf]
+    local doom = M.screen_buf_to_doom[buf]
     if not doom or doom.closed then
       return
+    end
+    if doom.screen.win == win then
+      doom.screen.win = nil
     end
 
     -- Window may have been closed *because* the buffer was unloaded, so we
@@ -217,8 +220,8 @@ api.nvim_create_autocmd("WinClosed", {
       -- "[actually-doom.nvim]" prefix; helps avoid hit-ENTER anyway.
       print(
         (
-          'DOOM is still running! Use ":tab %dsb" and type "i" to resume, or '
-          .. '":%dbd!" to quit'
+          "DOOM is still running! "
+          .. 'Use ":%dDoom" to resume, or ":%dbd!" to quit'
         ):format(buf, buf)
       )
     end))
@@ -454,7 +457,7 @@ function Screen.new(doom, resx, resy)
       screen.buf,
       ("actually-doom://screen//%d"):format(doom.process.pid)
     )
-    screen_buf_to_doom[screen.buf] = doom
+    M.screen_buf_to_doom[screen.buf] = doom
 
     screen.term_chan = api.nvim_open_term(screen.buf, {
       on_input = doom:close_on_err_wrap(function(_, _, _, data)
@@ -472,21 +475,10 @@ function Screen.new(doom, resx, resy)
     })
     -- Hide the cursor, disable line wrapping.
     api.nvim_chan_send(screen.term_chan, "\27[?25l\27?7l")
-
     -- Disable the scrollback buffer as much as we can.
     api.nvim_set_option_value("scrollback", 1, { buf = screen.buf })
 
-    local win_config = new_screen_win_config()
-    screen.width = win_config.width
-    screen.height = win_config.height
-    screen.win = api.nvim_open_win(screen.buf, true, win_config)
-
-    api.nvim_set_option_value("winfixbuf", true, { win = screen.win })
-    api.nvim_set_option_value("wrap", false, { win = screen.win })
-
-    screen:update_title()
-    screen:redraw()
-    api.nvim_command "startinsert"
+    screen:goto_win()
   end
   -- If in a fast context, we can't create the UI immediately.
   if vim.in_fast_event() then
@@ -508,11 +500,40 @@ function Screen:close()
   end
 
   if self.buf then
-    screen_buf_to_doom[self.buf] = nil
+    M.screen_buf_to_doom[self.buf] = nil
     if api.nvim_buf_is_valid(self.buf) then
       api.nvim_buf_delete(self.buf, { force = true })
     end
   end
+end
+
+function Screen:goto_win()
+  if self.closed or self.doom.closed then
+    return
+  end
+  if vim.in_fast_event() then
+    vim.schedule(function()
+      self:goto_win()
+    end)
+    return
+  end
+  if self.win and api.nvim_win_is_valid(self.win) then
+    api.nvim_set_current_win(self.win)
+    api.nvim_command "startinsert"
+    return
+  end
+
+  -- Create a new window.
+  local win_config = new_screen_win_config()
+  self.width = win_config.width
+  self.height = win_config.height
+  self.win = api.nvim_open_win(self.buf, true, win_config)
+
+  api.nvim_set_option_value("winfixbuf", true, { win = self.win })
+  api.nvim_set_option_value("wrap", false, { win = self.win })
+
+  self:update_title()
+  api.nvim_command "startinsert"
 end
 
 do

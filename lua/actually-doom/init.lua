@@ -299,16 +299,6 @@ local function init_process(doom, sock_path)
     end
   end
 
-  --- @param out vim.SystemCompleted
-  local exit_cb = function(out)
-    doom.console:print "\n"
-    doom.console:plugin_print(
-      ("DOOM (PID %d) exited with code %d\n"):format(doom.process.pid, out.code),
-      out.code ~= 0 and "ErrorMsg" or nil
-    )
-    doom:close()
-  end
-
   local sys_ok, sys_rv = pcall(vim.system, {
     fs.joinpath(script_dir, "../../doom/build/actually_doom"),
     "-listen",
@@ -318,7 +308,14 @@ local function init_process(doom, sock_path)
   }, {
     stdout = new_out_cb(),
     stderr = new_out_cb "WarningMsg",
-  }, exit_cb)
+  }, function(out)
+    doom.console:print "\n"
+    doom.console:plugin_print(
+      ("DOOM (PID %d) exited with code %d\n"):format(doom.process.pid, out.code),
+      out.code ~= 0 and "ErrorMsg" or nil
+    )
+    doom:close()
+  end)
 
   if not sys_ok then
     error(("[actually-doom.nvim] Failed to run DOOM: %s"):format(sys_rv), 0)
