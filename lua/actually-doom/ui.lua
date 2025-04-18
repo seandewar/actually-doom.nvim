@@ -93,6 +93,137 @@ api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
       end
     end
   end,
+  desc = "[actually-doom.nvim] Pause redraws when screen is not visible",
+})
+
+api.nvim_create_autocmd("WinLeave", {
+  group = augroup,
+  nested = true,
+  callback = function(_)
+    local win = api.nvim_get_current_win()
+    local buf = api.nvim_win_get_buf(win)
+    local doom = screen_buf_to_doom[buf]
+    if not doom or doom.closed or win ~= doom.screen.win then
+      return
+    end
+    -- We close the window when leaving because it's confusing when a different
+    -- window has focus (the float is large and likely to overlap and hide the
+    -- cursor), so no need if the window was made non-floating.
+    if api.nvim_win_get_config(win).relative == "" then
+      return
+    end
+    api.nvim_win_close(win, true)
+  end,
+  desc = "[actually-doom.nvim] Close floating screen window when leaving",
+})
+
+--- @param width integer?
+--- @param height integer?
+--- @return vim.api.keyset.win_config
+--- @nodiscard
+local function new_screen_win_config(width, height)
+  local editor_width = api.nvim_get_option_value("columns", {})
+  -- No way to get &cmdheight for a non-current tabpage yet (that isn't hacky).
+  local editor_height = api.nvim_get_option_value("lines", {})
+    - api.nvim_get_option_value("cmdheight", {})
+
+  width = math.max(1, width or editor_width)
+  -- Minus 1 for the title border.
+  height = math.max(1, height or (editor_height - 1))
+
+  return {
+    relative = "editor",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((editor_width - width) * 0.5)),
+    -- Minus 1 for the title border.
+    row = math.max(0, math.floor((editor_height - height - 1) * 0.5)),
+    style = "minimal",
+    border = { "", "─", "", "", "", "", "", "" },
+  }
+end
+
+-- As there's no way to get the correct &cmdheight of a non-current tabpage,
+-- run this on TabEnter too and only resize windows in the current tabpage.
+api.nvim_create_autocmd({ "VimResized", "VimEnter", "TabEnter", "OptionSet" }, {
+  group = augroup,
+  nested = true,
+  callback = function(args)
+    if vim.tbl_isempty(screen_buf_to_doom) then
+      return
+    end
+    -- OptionSet only relevant if &cmdheight was changed, as the float can't
+    -- overlap with the command-line area.
+    if args.event == "OptionSet" and args.match ~= "cmdheight" then
+      return
+    end
+
+    local tp = api.nvim_get_current_tabpage()
+    for _, doom in pairs(screen_buf_to_doom) do
+      if
+        doom
+        and not doom.closed
+        and doom.screen.win
+        and api.nvim_win_is_valid(doom.screen.win)
+        and api.nvim_win_get_tabpage(doom.screen.win) == tp
+        and api.nvim_win_get_config(doom.screen.win).relative ~= "" -- Floating.
+      then
+        api.nvim_win_set_config(doom.screen.win, new_screen_win_config())
+      end
+    end
+  end,
+  desc = "[actually-doom.nvim] Resize floating screen windows to fit editor",
+})
+api.nvim_create_autocmd("WinResized", {
+  group = augroup,
+  callback = function(_)
+    if vim.tbl_isempty(screen_buf_to_doom) then
+      return
+    end
+
+    for _, win in ipairs(vim.v.event.windows) do
+      if
+        api.nvim_win_is_valid(win)
+        and api.nvim_win_get_config(win).relative ~= "" -- Floating.
+      then
+        local doom = screen_buf_to_doom[api.nvim_win_get_buf(win)]
+        if doom and not doom.closed and win == doom.screen.win then
+          api.nvim_win_set_config(win, new_screen_win_config())
+        end
+      end
+    end
+  end,
+  desc = "[actually-doom.nvim] Resize floating screen windows to fit editor",
+})
+
+api.nvim_create_autocmd("WinClosed", {
+  group = augroup,
+  callback = function(args)
+    local win = assert(tonumber(args.match))
+    local buf = api.nvim_win_get_buf(win)
+    local doom = screen_buf_to_doom[buf]
+    if not doom or doom.closed then
+      return
+    end
+
+    -- Window may have been closed *because* the buffer was unloaded, so we
+    -- don't want to print the hint in that case. As the unload may have been
+    -- scheduled, schedule this 2 event loop ticks later so this happens after.
+    vim.schedule(vim.schedule_wrap(function()
+      if doom.closed or fn.bufwinnr(buf) ~= -1 then
+        return
+      end
+      -- Pretty clear it's from this plugin, so don't bother with the
+      -- "[actually-doom.nvim]" prefix; helps avoid hit-ENTER anyway.
+      print(
+        (
+          'DOOM is still running! Use ":tab %dsb" and type "i" to resume, or '
+          .. '":%dbd!" to quit'
+        ):format(buf, buf)
+      )
+    end))
+  end,
+  desc = "[actually-doom.nvim] Print hint when all screens in tabpage close",
 })
 
 --- @class HlExtmark
@@ -124,8 +255,10 @@ function Console.new(doom)
   api.nvim_set_option_value("modifiable", false, { buf = console.buf })
 
   if doom then
+    -- Not a global autocmd as we may not have a screen yet when it's called.
     console.close_autocmd = api.nvim_create_autocmd("BufUnload", {
       group = augroup,
+      nested = true,
       callback = vim.schedule_wrap(function(args)
         if args.buf == doom.console.buf or args.buf == doom.screen.buf then
           doom.console:plugin_print "Game buffer was unloaded; quitting\n"
@@ -133,6 +266,7 @@ function Console.new(doom)
           return true -- Delete this autocmd (close should've done that anyway)
         end
       end),
+      desc = "[actually-doom.nvim] Quit game when buffers are unloaded",
     })
   end
 
@@ -339,48 +473,16 @@ function Screen.new(doom, resx, resy)
     -- Hide the cursor, disable line wrapping.
     api.nvim_chan_send(screen.term_chan, "\27[?25l\27?7l")
 
-    local screen_width = api.nvim_get_option_value("columns", {})
-    local screen_height = api.nvim_get_option_value("lines", {})
-      - api.nvim_get_option_value("cmdheight", {})
-
-    -- Minus 2 for the borders.
-    screen.width = math.max(1, math.floor(screen_width - 2))
-    screen.height = math.max(1, math.floor(screen_height - 2))
     -- Disable the scrollback buffer as much as we can.
     api.nvim_set_option_value("scrollback", 1, { buf = screen.buf })
 
-    screen.win = api.nvim_open_win(screen.buf, true, {
-      relative = "editor",
-      width = screen.width,
-      height = screen.height,
-      -- Minus 2 for the borders.
-      col = math.max(0, math.floor((screen_width - screen.width - 2) * 0.5)),
-      row = math.max(0, math.floor((screen_height - screen.height - 2) * 0.5)),
-      style = "minimal",
-      border = "rounded",
-    })
+    local win_config = new_screen_win_config()
+    screen.width = win_config.width
+    screen.height = win_config.height
+    screen.win = api.nvim_open_win(screen.buf, true, win_config)
+
     api.nvim_set_option_value("winfixbuf", true, { win = screen.win })
     api.nvim_set_option_value("wrap", false, { win = screen.win })
-    api.nvim_create_autocmd("WinClosed", {
-      group = augroup,
-      once = true,
-      pattern = tostring(screen.win),
-      -- Window may have been closed *because* the buffer was unloaded, so we
-      -- don't want to print the hint in that case. As the unload may be
-      -- scheduled, schedule this twice so the unload happens before.
-      callback = vim.schedule_wrap(vim.schedule_wrap(function(_)
-        if not doom.closed then
-          -- Pretty clear it's from this plugin, so don't bother with the
-          -- "[actually-doom.nvim]" prefix; helps avoid hit-ENTER anyway.
-          print(
-            (
-              'DOOM is still running! Use ":tab %dsb" and type "i" to resume, '
-              .. 'or ":%dbd!" to quit'
-            ):format(screen.buf, screen.buf)
-          )
-        end
-      end)),
-    })
 
     screen:update_title()
     screen:redraw()

@@ -1,14 +1,15 @@
 # High priority
+- [ ] Add a way to re-open the screen as a float (maybe just `:Doom` can do
+  this; change the hint message to match)
 - [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
   Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
   inputs...
-- [ ] Hide the left/right or bottom borders if the screen float meets the
-  appropriate edge of the editor screen (keep the top border though for the
-  title); we want all the room we can get!
 - [ ] Automatic rebuilding of the executable.
 - [ ] IWAD selection.
 - [ ] Add kitty image protocol support. (can use Doom's UI in that case, though
   using `vim.ui.select()` for menus etc. may still be useful)
+- [ ] Allow any size of the float when using kitty image protocol. Show all the
+  float borders in this case.
 
 # Medium Priority
 - [ ] Implement music, maybe in the executable.
