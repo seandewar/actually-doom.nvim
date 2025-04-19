@@ -1,5 +1,6 @@
 local api = vim.api
 local fn = vim.fn
+local log = vim.log
 
 local ffi
 do
@@ -218,11 +219,12 @@ api.nvim_create_autocmd("WinClosed", {
       end
       -- Pretty clear it's from this plugin, so don't bother with the
       -- "[actually-doom.nvim]" prefix; helps avoid hit-ENTER anyway.
-      print(
+      vim.notify(
         (
           "DOOM is still running! "
           .. 'Use ":%dDoom" to resume, or ":%dbd!" to quit'
-        ):format(buf, buf)
+        ):format(buf, buf),
+        log.levels.INFO
       )
     end))
   end,

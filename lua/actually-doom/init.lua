@@ -1,6 +1,7 @@
 local api = vim.api
 local fn = vim.fn
 local fs = vim.fs
+local log = vim.log
 local uv = vim.uv
 
 local M = {
@@ -633,7 +634,7 @@ end
 function M.play()
   local ok, rv = pcall(Doom.run)
   if not ok then
-    api.nvim_echo({ { rv } }, true, { err = true })
+    vim.notify(tostring(rv), log.levels.ERROR)
     return nil
   end
   return rv
