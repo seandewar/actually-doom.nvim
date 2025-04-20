@@ -11,6 +11,9 @@
 #define DOOMGENERIC_RESY 400
 #endif // DOOMGENERIC_RESY
 
+#define DOOMGENERIC_SCREEN_BUF_SIZE \
+    (DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof DG_ScreenBuffer[0])
+
 typedef uint32_t pixel_t;
 
 extern pixel_t *DG_ScreenBuffer;

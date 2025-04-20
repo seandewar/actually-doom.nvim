@@ -45,7 +45,7 @@ struct FB_ScreenInfo {
     struct FB_BitField red;   /* bitfield in s_Fb mem if true color, */
     struct FB_BitField green; /* else only length is significant */
     struct FB_BitField blue;
-    struct FB_BitField transp; /* transparency                  */
+    struct FB_BitField alpha; /* transparency                  */
 };
 
 static struct FB_ScreenInfo s_Fb;
@@ -121,16 +121,18 @@ void cmap_to_fb(uint8_t *out, uint8_t *in, int in_pixels)
     uint32_t j;
     struct color c;
     uint32_t pix;
-    uint16_t r, g, b;
+    uint16_t r, g, b, a;
 
     for (i = 0; i < in_pixels; i++) {
         c = colors[*in]; /* R:8 G:8 B:8 format! */
         r = (uint16_t)(c.r >> (8 - s_Fb.red.length));
         g = (uint16_t)(c.g >> (8 - s_Fb.green.length));
         b = (uint16_t)(c.b >> (8 - s_Fb.blue.length));
+        a = (uint16_t)(c.a >> (8 - s_Fb.alpha.length));
         pix = r << s_Fb.red.offset;
         pix |= g << s_Fb.green.offset;
         pix |= b << s_Fb.blue.offset;
+        pix |= a << s_Fb.alpha.offset;
 
         for (k = 0; k < fb_scaling; k++) {
             for (j = 0; j < s_Fb.bits_per_pixel / 8; j++) {
@@ -157,12 +159,12 @@ void I_InitGraphics(void)
     s_Fb.blue.length = 8;
     s_Fb.green.length = 8;
     s_Fb.red.length = 8;
-    s_Fb.transp.length = 8;
+    s_Fb.alpha.length = 8;
 
-    s_Fb.blue.offset = 0;
+    s_Fb.blue.offset = 16;
     s_Fb.green.offset = 8;
-    s_Fb.red.offset = 16;
-    s_Fb.transp.offset = 24;
+    s_Fb.red.offset = 0;
+    s_Fb.alpha.offset = 24;
 
     printf("I_InitGraphics: framebuffer: x_res: %d, y_res: %d, x_virtual: %d, "
            "y_virtual: %d, bpp: %d\n",
@@ -170,10 +172,10 @@ void I_InitGraphics(void)
            s_Fb.bits_per_pixel);
 
     printf("I_InitGraphics: framebuffer: RGBA: %d%d%d%d, red_off: %d, "
-           "green_off: %d, blue_off: %d, transp_off: %d\n",
+           "green_off: %d, blue_off: %d, alpha_off: %d\n",
            s_Fb.red.length, s_Fb.green.length, s_Fb.blue.length,
-           s_Fb.transp.length, s_Fb.red.offset, s_Fb.green.offset,
-           s_Fb.blue.offset, s_Fb.transp.offset);
+           s_Fb.alpha.length, s_Fb.red.offset, s_Fb.green.offset,
+           s_Fb.blue.offset, s_Fb.alpha.offset);
 
     printf("I_InitGraphics: DOOM screen size: w x h: %d x %d\n", SCREENWIDTH,
            SCREENHEIGHT);
@@ -300,7 +302,7 @@ void I_SetPalette(byte *palette)
      * map to the right pixel format over here! */
 
     for (i = 0; i < 256; ++i) {
-        colors[i].a = 0;
+        colors[i].a = 0xff;
         colors[i].r = gammatable[usegamma][*palette++];
         colors[i].g = gammatable[usegamma][*palette++];
         colors[i].b = gammatable[usegamma][*palette++];

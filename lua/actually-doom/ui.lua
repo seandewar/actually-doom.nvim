@@ -1,4 +1,5 @@
 local api = vim.api
+local base64 = vim.base64
 local fn = vim.fn
 local log = vim.log
 
@@ -55,6 +56,89 @@ do
   end, ns)
 end
 
+-- Scratch buffer for building messages to be sent to the terminal.
+-- It lives at this scope so the allocated space can be re-used.
+local scratch_buf = require("string.buffer").new()
+local kitty_image_id = 1337 -- TODO
+
+-- TODO: can we replace most of this logic with Unicode placeholders?
+--- @param win integer
+local function redraw_kitty_win(win)
+  local width = api.nvim_win_get_width(win)
+  local height = api.nvim_win_get_height(win)
+  -- nvim_win_get_position doesn't give us the inner position (without borders),
+  -- but screenpos can't be used reliably when topline/leftcol happens to be
+  -- invalid. Just include the size of the top/left borders ourselves.
+  local row, col = unpack(api.nvim_win_get_position(win))
+  local border = api.nvim_win_get_config(win).border
+  row = row + (border and border[2] ~= "" and 1 or 0) -- Top border.
+  col = col + (border and border[8] ~= "" and 1 or 0) -- Left border.
+
+  scratch_buf:put(
+    -- Move cursor to window.
+    "\27[",
+    row + 1, -- Expects 1-indexed.
+    ";",
+    col + 1, -- Expects 1-indexed.
+    "H",
+    -- Draw frame at cursor, scaling to the inner size of the window.
+    "\27_Gq=2,a=p,i=",
+    kitty_image_id,
+    ",c=",
+    width,
+    ",r=",
+    height,
+    "\27\\"
+  )
+end
+
+local pending_kitty_redraw = false
+-- TODO: maybe be smarter about redraws, this is pretty heavy-handed.
+local function redraw_kitty_wins()
+  pending_kitty_redraw = false
+  local moved_cursor = false
+  -- Clear existing placements of the screen image.
+  scratch_buf:put("\27_Ga=d,d=a,i=", kitty_image_id, "\27\\")
+
+  local tp = api.nvim_get_current_tabpage()
+  for buf, doom in pairs(M.screen_buf_to_doom) do
+    if not doom.closed then
+      for _, win in ipairs(fn.win_findbuf(buf)) do
+        if api.nvim_win_get_tabpage(win) == tp then
+          redraw_kitty_win(win)
+          moved_cursor = true
+        end
+      end
+    end
+  end
+
+  -- Send written sequences to the host terminal.
+  if moved_cursor then
+    -- Save cursor position, write redraw commands, restore cursor position.
+    io.stdout:write(("\27[s%s\27[u"):format(scratch_buf:get()))
+  elseif #scratch_buf > 0 then
+    -- No need to save and restore cursor if we didn't move it.
+    io.stdout:write(scratch_buf:get())
+  end
+end
+
+api.nvim_set_decoration_provider(ns, {
+  on_start = function(_, _)
+    if not pending_kitty_redraw then
+      -- Redraw after a short grace period to give the TUI and host terminal
+      -- time to finish flushing (otherwise things like screen clears may
+      -- trigger *after* we redraw).
+      --
+      -- TODO: still might not be enough in some cases; try re-scheduling every
+      -- 1 second or so if there's a screen visible, but MAKE SURE ALL
+      -- PLACEMENTS ARE GONE as soon as the screen goes invisible, in case the
+      -- final scheduled redraw before that didn't work.
+      vim.defer_fn(redraw_kitty_wins, 100)
+      pending_kitty_redraw = true
+    end
+  end,
+})
+
 -- In the case where a window switches its buffer, it would be nice to use
 -- BufWin{Enter,Leave} instead of BufEnter,WinClosed with simplified logic, but
 -- as they rely on the buffer's hidden state they're (unfortunately) influenced
@@ -87,7 +171,6 @@ api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
           doom.console:plugin_print("Game visible; redraws ON\n", "Comment")
           doom:send_frame_request()
           doom:schedule_check()
-          doom.screen:redraw()
         elseif old_visible and not doom.screen.visible then
           doom.console:plugin_print("Game hidden; redraws OFF\n", "Comment")
         end
@@ -422,17 +505,16 @@ end
 --- @field title string?
 --- @field resx integer
 --- @field resy integer
---- @field pixels string?
---- @field blend boolean?
---- @field redraw_scheduled boolean?
 --- @field visible boolean?
 ---
 --- @field closed boolean?
 --- @field buf integer?
 --- @field win integer?
 --- @field term_chan integer?
---- @field width integer?
---- @field height integer?
+--- @field term_width integer?
+--- @field term_height integer?
+--- @field term_blend_pixels boolean?
+--- @field term_pending_pixels string?
 local Screen = {}
 
 --- @param doom Doom
@@ -445,7 +527,7 @@ function Screen.new(doom, resx, resy)
     doom = doom,
     resx = resx,
     resy = resy,
-    blend = true,
+    term_blend_pixels = true,
   }, { __index = Screen })
 
   local function create_ui()
@@ -465,18 +547,18 @@ function Screen.new(doom, resx, resy)
       on_input = doom:close_on_err_wrap(function(_, _, _, data)
         local lines, columns = data:match "^\27%[(%d+);(%d+)R$"
         if lines then
-          -- Cursor position report (DSR-CPR) requested by Screen.redraw to get
+          -- Cursor position report (DSR-CPR) requested by Screen.refresh to get
           -- the current size of the terminal.
           --- @cast lines string
           --- @cast columns string
-          screen.width = tonumber(columns)
-          screen.height = tonumber(lines)
+          screen.term_width = tonumber(columns)
+          screen.term_height = tonumber(lines)
         end
       end),
       force_crlf = false,
     })
     -- Hide the cursor, disable line wrapping.
-    api.nvim_chan_send(screen.term_chan, "\27[?25l\27?7l")
+    api.nvim_chan_send(screen.term_chan, "\27[?25l\27[?7l")
     -- Disable the scrollback buffer as much as we can.
     api.nvim_set_option_value("scrollback", 1, { buf = screen.buf })
 
@@ -527,8 +609,8 @@ function Screen:goto_win()
 
   -- Create a new window.
   local win_config = new_screen_win_config()
-  self.width = win_config.width
-  self.height = win_config.height
+  self.term_width = win_config.width
+  self.term_height = win_config.height
   self.win = api.nvim_open_win(self.buf, true, win_config)
 
   api.nvim_set_option_value("winfixbuf", true, { win = self.win })
@@ -609,105 +691,113 @@ do
     return colour
   end
 
-  local buf = require("string.buffer").new() -- Reuse allocation if possible.
-
-  function Screen:redraw()
-    if not self.visible or not self.term_chan then
+  --- @param pixels string
+  function Screen:refresh_term(pixels)
+    if not self.term_chan then
       return
     end
     if vim.in_fast_event() then
-      if not self.redraw_scheduled then
-        self.redraw_scheduled = true
+      if not self.term_pending_pixels then
         vim.schedule(function()
-          self.redraw_scheduled = false
-          self:redraw()
+          self:refresh_term(self.term_pending_pixels)
+          self.term_pending_pixels = nil
         end)
       end
+      self.term_pending_pixels = pixels
       return
     end
 
-    if self.pixels then
-      local true_colour = api.nvim_get_option_value("termguicolors", {})
-        or fn.has "gui_running" == 1
+    local true_colour = api.nvim_get_option_value("termguicolors", {})
+      or fn.has "gui_running" == 1
 
-      --- @param x integer (0-indexed)
-      --- @param y integer (0-indexed)
-      --- @return integer, integer (0-indexed)
-      --- @nodiscard
-      local function pixel_topleft_pos(x, y)
-        local pix_x =
-          math.min(math.floor((x / self.width) * self.resx), self.resx)
-        local pix_y =
-          math.min(math.floor((y / self.height) * self.resy), self.resy)
-        return pix_x, pix_y
-      end
+    --- @param x integer (0-indexed)
+    --- @param y integer (0-indexed)
+    --- @return integer, integer (0-indexed)
+    --- @nodiscard
+    local function pixel_topleft_pos(x, y)
+      local pix_x =
+        math.min(math.floor((x / self.term_width) * self.resx), self.resx)
+      local pix_y =
+        math.min(math.floor((y / self.term_height) * self.resy), self.resy)
+      return pix_x, pix_y
+    end
 
-      -- Cursor to 0,0.
-      buf:put "\27[H"
+    -- Cursor to 0,0.
+    scratch_buf:put "\27[H"
 
-      for y = 0, self.height - 1 do -- 0-indexed
-        for x = 0, self.width - 1 do -- 0-indexed
-          -- Pixel positions are 0-indexed.
-          local pix_x, pix_y = pixel_topleft_pos(x, y)
-          local r, g, b
-          if self.blend then
-            -- Blend all pixels within this cell.
-            local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
-            pix_x2 = math.min(self.resx - 1, pix_x2)
-            pix_y2 = math.min(self.resy - 1, pix_y2)
-            local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
-            r, g, b = 0, 0, 0
-            for py = pix_y, pix_y2 do
-              for px = pix_x, pix_x2 do
-                local pi = self:pixel_index(px, py) + 1
-                local pb, pg, pr = self.pixels:byte(pi, pi + 3)
-                r = r + pr
-                g = g + pg
-                b = b + pb
-              end
+    for y = 0, self.term_height - 1 do -- 0-indexed
+      for x = 0, self.term_width - 1 do -- 0-indexed
+        -- Pixel positions are 0-indexed.
+        local pix_x, pix_y = pixel_topleft_pos(x, y)
+        local r, g, b
+        if self.term_blend_pixels then
+          -- Blend all pixels within this cell.
+          local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
+          pix_x2 = math.min(self.resx - 1, pix_x2)
+          pix_y2 = math.min(self.resy - 1, pix_y2)
+          local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
+          r, g, b = 0, 0, 0
+          for py = pix_y, pix_y2 do
+            for px = pix_x, pix_x2 do
+              local pi = self:pixel_index(px, py) + 1
+              local pr, pg, pb = pixels:byte(pi, pi + 3)
+              r = r + pr
+              g = g + pg
+              b = b + pb
             end
-
-            r = math.min(255, math.floor(r / pix_count + 0.5))
-            g = math.min(255, math.floor(g / pix_count + 0.5))
-            b = math.min(255, math.floor(b / pix_count + 0.5))
-          else
-            -- Just use the pixel at the top-left.
-            local pix_i = self:pixel_index(pix_x, pix_y) + 1
-            b, g, r = self.pixels:byte(pix_i, pix_i + 3)
           end
 
-          if true_colour then
-            -- Set background RGB "true" colour and write a space.
-            buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
-          else
-            -- Same as above, but using a near xterm-256 colour instead.
-            buf:put("\27[48;5;", rgb_to_xterm256(r, g, b), "m ")
-          end
+          r = math.min(255, math.floor(r / pix_count + 0.5))
+          g = math.min(255, math.floor(g / pix_count + 0.5))
+          b = math.min(255, math.floor(b / pix_count + 0.5))
+        else
+          -- Just use the pixel at the top-left.
+          local pix_i = self:pixel_index(pix_x, pix_y) + 1
+          r, g, b = pixels:byte(pix_i, pix_i + 3)
         end
 
-        if y + 1 < self.height then
-          buf:put "\r\n"
+        if true_colour then
+          -- Set background RGB "true" colour and write a space.
+          scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
+        else
+          -- Same as above, but using a near xterm-256 colour instead.
+          scratch_buf:put("\27[48;5;", rgb_to_xterm256(r, g, b), "m ")
         end
       end
 
-      -- When using RGB, it's possible for Nvim to run out of free highlighting
-      -- attribute entries, causing transparent cells to be drawn (showing the
-      -- background colour of the Screen window) after Nvim clears and rebuilds
-      -- the attribute tables. We can work around this by forcing a rebuild of
-      -- the tables before we send the frame, but this requires LuaJIT.
-      if true_colour and ffi then
-        ffi.C.clear_hl_tables(true)
+      if y + 1 < self.term_height then
+        scratch_buf:put "\r\n"
       end
-    else
-      -- Reset attributes, clear screen, clear scrollback.
-      buf:put "\27[0m\27[2J\27[3J"
+    end
+
+    -- When using RGB, it's possible for Nvim to run out of free highlighting
+    -- attribute entries, causing transparent cells to be drawn (showing the
+    -- background colour of the Screen window) after Nvim clears and rebuilds
+    -- the attribute tables. We can work around this by forcing a rebuild of
+    -- the tables before we send the frame, but this requires LuaJIT.
+    if true_colour and ffi then
+      ffi.C.clear_hl_tables(true)
     end
 
     -- Get the size of the terminal by moving the cursor to the bottom-right and
     -- then querying its position (DSR). This is so we can detect resizes.
-    buf:put "\27[99999;99999H\27[6n"
+    scratch_buf:put "\27[99999;99999H\27[6n"
+    api.nvim_chan_send(self.term_chan, scratch_buf:get())
+  end
 
-    api.nvim_chan_send(self.term_chan, buf:get())
+  local kitty_shm_name_base64 = base64.encode "/actually-doom" -- TODO
+
+  function Screen:refresh_kitty_from_shm()
+    -- Use frame image data from a shared memory object. (32-bit RGBA)
+    -- Send messages to the host terminal, not our embedded one.
+    io.stdout:write(
+      ("\27_Gq=2,t=s,f=32,i=%d,s=%d,v=%d;%s\27\\"):format(
+        kitty_image_id,
+        self.resx,
+        self.resy,
+        kitty_shm_name_base64
+      )
+    )
   end
 end
 

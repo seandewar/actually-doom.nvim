@@ -4,8 +4,6 @@
   inputs...
 - [ ] Automatic rebuilding of the executable.
 - [ ] IWAD selection.
-- [ ] Add kitty image protocol support. (can use Doom's UI in that case, though
-  using `vim.ui.select()` for menus etc. may still be useful)
 - [ ] Allow any size of the float when using kitty image protocol. Show all the
   float borders in this case.
 

@@ -396,9 +396,17 @@ local function recv_msg_loop(doom, buf)
     -- AMSG_FRAME
     [0] = function()
       local len = doom.screen:pixel_index(0, doom.screen.resy)
-      doom.screen.pixels = read_bytes(len)
+      doom.screen:refresh_term(read_bytes(len))
       if doom.screen.visible then
-        doom.screen:redraw()
+        doom:send_frame_request()
+        doom:schedule_check()
+      end
+    end,
+
+    -- AMSG_FRAME_SHM_READY
+    [3] = function()
+      doom.screen:refresh_kitty_from_shm()
+      if doom.screen.visible then
         doom:send_frame_request()
         doom:schedule_check()
       end

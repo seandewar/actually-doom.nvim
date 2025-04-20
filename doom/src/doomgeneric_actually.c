@@ -1,10 +1,14 @@
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <time.h>
@@ -32,6 +36,9 @@ enum {
     // AMSG_FRAME, pixels: u24[resx * resy] (BGR)
     AMSG_FRAME = 0,
 
+    // AMSG_FRAME_SHM_READY (no payload)
+    AMSG_FRAME_SHM_READY = 3,
+
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
 
@@ -51,8 +58,11 @@ enum {
 static const char *listen_sock_path;
 static int listen_sock_fd = -1;
 static int comm_sock_fd = -1;
+static int frame_shm_fd = -1;
 
-// Enough for a whole frame and (a decent amount) of leeway.
+static char frame_shm_name[NAME_MAX] = "/actually-doom"; // TODO debug
+
+// Enough for a whole frame (no alpha) and (a decent amount) of leeway.
 #define COMM_WRITE_BUF_CAP (2 * DOOMGENERIC_RESX * DOOMGENERIC_RESY * 3)
 
 static struct {
@@ -60,8 +70,8 @@ static struct {
     size_t len;
 } comm_send_buf;
 
-static uint32_t clock_start_ms;
 static volatile sig_atomic_t interrupted;
+static uint32_t clock_start_ms;
 
 static boolean comm_writing_msg;
 
@@ -429,6 +439,32 @@ void DG_WipeTick(void)
     Comm_Receive();
 }
 
+static void CloseFrameShm(void)
+{
+    if (frame_shm_fd >= 0 && close(frame_shm_fd) == -1) {
+        fprintf(
+            stderr,
+            LOG_PRE
+            "Warning: Failed to close frame data shared memory object: %s\n",
+            strerror(errno));
+    }
+
+    frame_shm_fd = -1;
+}
+
+static void UnlinkFrameShm(void)
+{
+    if (frame_shm_name[0] != '\0' && shm_unlink(frame_shm_name) == -1) {
+        fprintf(
+            stderr,
+            LOG_PRE
+            "Warning: Failed to delete frame data shared memory object: %s\n",
+            strerror(errno));
+    }
+
+    frame_shm_name[0] = '\0';
+}
+
 static void CloseListenSocket(void)
 {
     if (listen_sock_fd >= 0 && close(listen_sock_fd) == -1) {
@@ -449,15 +485,15 @@ static void CloseListenSocket(void)
     listen_sock_path = NULL;
 }
 
-static void CloseSockets(void)
+static void Cleanup(void)
 {
     CloseListenSocket();
 
     if (comm_sock_fd >= 0) {
         if (!comm_writing_msg)
             COMM_WRITE_MSG(Comm_Write8(AMSG_QUIT));
-        Comm_FlushSend(true);
 
+        Comm_FlushSend(true);
         if (close(comm_sock_fd) == -1) {
             fprintf(stderr,
                     LOG_PRE
@@ -465,8 +501,10 @@ static void CloseSockets(void)
                     strerror(errno));
         }
     }
-
     comm_sock_fd = -1;
+
+    CloseFrameShm();
+    UnlinkFrameShm();
 }
 
 static uint32_t GetClockMs(void)
@@ -508,7 +546,7 @@ void DG_Init(void)
                 strerror(errno));
     }
 
-    I_AtExit(CloseSockets, true);
+    I_AtExit(Cleanup, true);
     // Bounds already checked above.
     strcpy(listen_sock_addr.sun_path, sock_path);
 
@@ -573,11 +611,60 @@ void DG_Init(void)
 
 void DG_DrawFrame(void)
 {
-    COMM_WRITE_MSG({
-        Comm_Write8(AMSG_FRAME);
-        for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
-            Comm_Write24(DG_ScreenBuffer[i]);
-    });
+    if (frame_shm_name[0] == '\0') {
+        // Just send it over the socket.
+        COMM_WRITE_MSG({
+            Comm_Write8(AMSG_FRAME);
+            for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
+                Comm_Write24(DG_ScreenBuffer[i]);
+        });
+        screenvisible = false;
+        return;
+    }
+    // Old file descriptor should already be closed, but make sure anyway.
+    CloseFrameShm();
+
+    frame_shm_fd =
+        shm_open(frame_shm_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    if (frame_shm_fd == -1) {
+        I_Error(LOG_PRE "Failed to create frame data shared memory object: %s",
+                strerror(errno));
+    }
+
+    while (ftruncate(frame_shm_fd, DOOMGENERIC_SCREEN_BUF_SIZE) == -1) {
+        if (errno == EINTR) {
+            if (interrupted)
+                I_Quit();
+            continue;
+        }
+        I_Error(LOG_PRE "Failed to set size of frame data shared memory: %s",
+                strerror(errno));
+    }
+
+    void *p = mmap(NULL, DOOMGENERIC_SCREEN_BUF_SIZE, PROT_READ | PROT_WRITE,
+                   MAP_SHARED, frame_shm_fd, 0);
+    if (p == MAP_FAILED) {
+        I_Error(LOG_PRE "Failed to map frame data shared memory: %s",
+                strerror(errno));
+    }
+    // File descriptor need not be kept open after mapping.
+    CloseFrameShm();
+
+    memcpy(p, DG_ScreenBuffer, DOOMGENERIC_SCREEN_BUF_SIZE);
+
+    if (msync(p, DOOMGENERIC_SCREEN_BUF_SIZE, MS_SYNC) == -1) {
+        I_Error(LOG_PRE "Failed to synchronize frame data shared memory: %s",
+                strerror(errno));
+    }
+
+    if (munmap(p, DOOMGENERIC_SCREEN_BUF_SIZE) == -1) {
+        fprintf(stderr,
+                LOG_PRE
+                "Warning: Failed to unmap frame data shared memory: %s\n",
+                strerror(errno));
+    }
+
+    COMM_WRITE_MSG(Comm_Write8(AMSG_FRAME_SHM_READY));
     screenvisible = false;
 }
 
@@ -604,6 +691,7 @@ int DG_GetKey(int *pressed, unsigned char *key)
 void DG_SleepMs(uint32_t ms)
 {
     struct timespec duration = {.tv_nsec = ms * NS_PER_MS};
+
     while (nanosleep(&duration, &duration) == -1) {
         if (errno == EINTR) {
             if (interrupted)
