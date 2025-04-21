@@ -51,6 +51,9 @@ enum {
     // CMSG_WANT_FRAME (no payload)
     CMSG_WANT_FRAME = 0,
 
+    // CMSG_SET_FRAME_SHM_NAME, name: string
+    CMSG_SET_FRAME_SHM_NAME = 2,
+
     // CMSG_PRESS_KEY, doomkey: u8, pressed: bool
     CMSG_PRESS_KEY = 1,
 };
@@ -58,9 +61,8 @@ enum {
 static const char *listen_sock_path;
 static int listen_sock_fd = -1;
 static int comm_sock_fd = -1;
+static char frame_shm_name[NAME_MAX];
 static int frame_shm_fd = -1;
-
-static char frame_shm_name[NAME_MAX] = "/actually-doom"; // TODO debug
 
 // Enough for a whole frame (no alpha) and (a decent amount) of leeway.
 #define COMM_WRITE_BUF_CAP (2 * DOOMGENERIC_RESX * DOOMGENERIC_RESY * 3)
@@ -130,6 +132,44 @@ static boolean Ring_Read8(ringbuf_t *r, uint8_t *v)
 
     *v = r->data[r->start_i++];
     r->start_i %= RINGBUF_SIZE;
+    return true;
+}
+
+static boolean Ring_Read16(ringbuf_t *r, uint16_t *v)
+{
+    if (Ring_GetLen(r) < 2)
+        return false;
+
+    *v = r->data[r->start_i++];
+    r->start_i %= RINGBUF_SIZE;
+    *v |= r->data[r->start_i++] << 8;
+    r->start_i %= RINGBUF_SIZE;
+    return true;
+}
+
+static boolean Ring_ReadBytes(ringbuf_t *r, char *p, size_t len)
+{
+    if (len == 0)
+        return true;
+    if (Ring_GetLen(r) < len)
+        return false;
+
+    size_t first_copy_len = r->start_i <= r->end_i ? r->end_i - r->start_i
+                                                   : RINGBUF_SIZE - r->start_i;
+    if (first_copy_len > len)
+        first_copy_len = len;
+
+    memcpy(p, r->data + r->start_i, first_copy_len);
+    p += first_copy_len;
+    r->start_i += first_copy_len;
+    r->start_i %= RINGBUF_SIZE;
+    len -= first_copy_len;
+
+    if (len == 0)
+        return true;
+
+    memcpy(p, r->data + r->start_i, len);
+    r->start_i += len;
     return true;
 }
 
@@ -263,16 +303,24 @@ static void Comm_WriteString(const char *s)
     Comm_WriteBytes(s, len);
 }
 
+static void UnlinkFrameShm(void);
+
 static void Comm_HandleReceivedMsgs(void)
 {
     // Crappy resumable state machine -- WHERE'S MY COROUTINES???
     static struct {
         unsigned stage;
         uint8_t msg_type;
+
         // Technically we can store the last value of a message on the stack,
         // but storing them here is less error-prone (and allows us to omit
         // braces in the switch cases lol)
         union {
+            struct {
+                uint16_t len;
+                char name[arrlen(frame_shm_name)];
+            } set_frame_shm_name;
+
             struct {
                 uint8_t doomkey;
                 uint8_t pressed;
@@ -291,6 +339,47 @@ static void Comm_HandleReceivedMsgs(void)
         case CMSG_WANT_FRAME:
             // No payload.
             screenvisible = true;
+            break;
+
+        case CMSG_SET_FRAME_SHM_NAME:
+            switch (state.stage) {
+            case 1:
+                if (!Ring_Read16(&comm_recv_buf,
+                                 &state.v.set_frame_shm_name.len))
+                    return;
+
+                if (state.v.set_frame_shm_name.len + 1u // Include NUL.
+                    > arrlen(state.v.set_frame_shm_name.name)) {
+                    I_Error(LOG_PRE "Requested frame data shared memory object "
+                                    "name too long; max: %zu, size: %" PRIu16,
+                            arrlen(state.v.set_frame_shm_name.name)
+                                - 1, // Exclude NUL.
+                            state.v.set_frame_shm_name.len);
+                }
+                ++state.stage;
+                // fallthrough
+
+            case 2:
+                if (!Ring_ReadBytes(&comm_recv_buf,
+                                    state.v.set_frame_shm_name.name,
+                                    state.v.set_frame_shm_name.len))
+                    return;
+                // Not strictly needed as we're not doing string operations on
+                // this buffer, but still nice to do.
+                state.v.set_frame_shm_name
+                    .name[state.v.set_frame_shm_name.len] = '\0';
+
+                UnlinkFrameShm();
+                memcpy(frame_shm_name, state.v.set_frame_shm_name.name,
+                       state.v.set_frame_shm_name.len);
+                frame_shm_name[state.v.set_frame_shm_name.len] = '\0';
+                printf(LOG_PRE "CMSG_SET_FRAME_SHM_NAME: name=\"%s\"\n",
+                       frame_shm_name);
+                break;
+
+            default:
+                abort();
+            }
             break;
 
         case CMSG_PRESS_KEY:

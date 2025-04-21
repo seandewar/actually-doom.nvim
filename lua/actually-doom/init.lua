@@ -1,4 +1,5 @@
 local api = vim.api
+local bit = require "bit"
 local fn = vim.fn
 local fs = vim.fs
 local log = vim.log
@@ -45,13 +46,13 @@ local script_dir = (function()
   return fn.fnamemodify(debug.getinfo(2, "S").source:sub(2), ":h:p")
 end)()
 
---- @class PressedKey
+--- @class (exact) PressedKey
 --- @field key integer
 --- @field shift boolean
 --- @field alt boolean
 --- @field release_time integer
 
---- @class Doom
+--- @class (exact) Doom
 --- @field console Console
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
@@ -60,6 +61,8 @@ end)()
 --- @field pressed_key PressedKey?
 --- @field screen Screen?
 --- @field closed boolean?
+---
+--- @field run function
 local Doom = {}
 
 function Doom:send_frame_request()
@@ -241,7 +244,7 @@ do
     then
       -- If the arrow key in the opposite direction was active, just cancel it.
       -- This allows for more precise movement in the terminal.
-      local opposite_arrow_doomkey = (doomkey - M.key.leftarrow + 2) % 4
+      local opposite_arrow_doomkey = bit.band(doomkey - M.key.leftarrow + 2, 3)
         + M.key.leftarrow
       if self.pressed_key.key == opposite_arrow_doomkey then
         self:press_key(nil)
@@ -258,6 +261,50 @@ do
     }
     self:schedule_check()
     return "" -- We handled the key, so eat it (yum!)
+  end
+end
+
+--- @param buf string.buffer
+--- @param s string
+--- @return string.buffer
+local function put_string(buf, s)
+  assert(#s <= 65535)
+  return buf:put(
+    string.char(bit.band(#s, 255)),
+    string.char(bit.rshift(#s, 8)),
+    s
+  )
+end
+
+--- @param on boolean?
+function Doom:enable_kitty(on)
+  -- TODO: these checks + in_fast_event checks are icky; simplify or remove
+  -- them and let callers handle this; also split the UI handles portion of
+  -- Screen into an optional object that's nil when the UI creation is still
+  -- scheduling
+  if not self.screen or not self.screen.buf or vim.in_fast_event() then
+    vim.schedule(function()
+      self:enable_kitty(on)
+    end)
+    return
+  end
+
+  --- @param name string?
+  local function send_frame_shm_name(name)
+    -- CMSG_SET_FRAME_SHM_NAME
+    self.send_buf:put "\2"
+    put_string(self.send_buf, name or "")
+  end
+
+  if on and self.screen.gfx.type ~= "kitty" then
+    local shm_name = ("/actually-doom:%d"):format(self.process.pid)
+    send_frame_shm_name(shm_name)
+    self:schedule_check()
+    self.screen:set_gfx(require "actually-doom.ui.kitty", shm_name)
+  elseif not on and self.screen.gfx.type == "kitty" then
+    send_frame_shm_name()
+    self:schedule_check()
+    self.screen:set_gfx(require "actually-doom.ui.cell")
   end
 end
 
@@ -334,12 +381,25 @@ end
 --- @param buf string.buffer
 local function recv_msg_loop(doom, buf)
   --- @param n integer (0 gives an empty string)
-  --- @return string
+  --- @return string; prefer skip_bytes if discarding, which can clear skipped
+  --- bytes without waiting for all to be buffered.
+  --- @nodiscard
   local function read_bytes(n)
     while n > #buf do
       coroutine.yield()
     end
     return buf:get(n)
+  end
+  --- @param n integer
+  local function skip_bytes(n)
+    while n > 0 do
+      local skipn = math.min(n, #buf)
+      buf:skip(skipn)
+      n = n - skipn
+      if n > 0 then
+        coroutine.yield()
+      end
+    end
   end
 
   --- @return integer
@@ -349,12 +409,12 @@ local function recv_msg_loop(doom, buf)
   --- @return integer
   local function read16()
     local a, b = read_bytes(2):byte(1, 2)
-    return a + (b * 256)
+    return bit.bor(a, bit.lshift(b, 8))
   end
   --- @return integer
   local function read32()
     local a, b, c, d = read_bytes(4):byte(1, 4)
-    return a + (b * 256) + (c * 65536) + (d * 16777216)
+    return bit.bor(a, bit.lshift(b, 8), bit.lshift(c, 16), bit.lshift(d, 24))
   end
   --- @return string
   local function read_string()
@@ -395,8 +455,17 @@ local function recv_msg_loop(doom, buf)
   local msg_handlers = {
     -- AMSG_FRAME
     [0] = function()
-      local len = doom.screen:pixel_index(0, doom.screen.resy)
-      doom.screen:refresh_term(read_bytes(len))
+      local len = require("actually-doom.ui.cell").pixel_index(
+        0,
+        doom.screen.resy,
+        doom.screen.resx
+      )
+      if doom.screen.gfx.type == "cell" then
+        doom.screen.gfx:refresh(read_bytes(len))
+      else
+        skip_bytes(len)
+      end
+
       if doom.screen.visible then
         doom:send_frame_request()
         doom:schedule_check()
@@ -405,7 +474,10 @@ local function recv_msg_loop(doom, buf)
 
     -- AMSG_FRAME_SHM_READY
     [3] = function()
-      doom.screen:refresh_kitty_from_shm()
+      if doom.screen.gfx.type == "kitty" then
+        doom.screen.gfx:refresh()
+      end
+
       if doom.screen.visible then
         doom:send_frame_request()
         doom:schedule_check()
