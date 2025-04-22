@@ -438,13 +438,13 @@ function M:refresh()
     check_term_size()
   end
 
-  -- Read frame image data (32-bit RGBA) from the shared memory object.
+  -- Read frame image data (24-bit RGB) from the shared memory object.
   -- Create/re-use and place the virtual placement for it.
   io.stdout:write(
     self.screen:passthrough_escape(
       (
         "\27_Gq=2,a=T,U=1,z=-1,p=%u,c=%u,r=%u," -- Control and placement info.
-        .. "t=s,f=32,i=%u,s=%u,v=%u;%s\27\\" -- Image info.
+        .. "t=s,f=24,i=%u,s=%u,v=%u;%s\27\\" -- Image info.
       ):format(
         self.image_id, -- Placement ID same as image ID for convenience.
         self.screen.term_width,

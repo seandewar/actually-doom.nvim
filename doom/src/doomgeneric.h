@@ -1,22 +1,14 @@
 #ifndef DOOM_GENERIC
 #define DOOM_GENERIC
 
+#include "doomtype.h"
+#include "i_video.h"
 #include <stdint.h>
 
-#ifndef DOOMGENERIC_RESX
-#define DOOMGENERIC_RESX 640
-#endif // DOOMGENERIC_RESX
+#define DOOMGENERIC_SCREEN_BUF_SIZE (SCREENWIDTH * SCREENHEIGHT * 3)
 
-#ifndef DOOMGENERIC_RESY
-#define DOOMGENERIC_RESY 400
-#endif // DOOMGENERIC_RESY
-
-#define DOOMGENERIC_SCREEN_BUF_SIZE \
-    (DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof DG_ScreenBuffer[0])
-
-typedef uint32_t pixel_t;
-
-extern pixel_t *DG_ScreenBuffer;
+// R8G8B8; 3 bytes per pixel.
+extern byte *DG_ScreenBuffer;
 
 void doomgeneric_Create(int argc, char **argv);
 void doomgeneric_Tick(void);

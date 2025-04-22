@@ -64,8 +64,8 @@ static int comm_sock_fd = -1;
 static char frame_shm_name[NAME_MAX];
 static int frame_shm_fd = -1;
 
-// Enough for a whole frame (no alpha) and (a decent amount) of leeway.
-#define COMM_WRITE_BUF_CAP (2 * DOOMGENERIC_RESX * DOOMGENERIC_RESY * 3)
+// Enough for a whole frame and (a decent amount) of leeway.
+#define COMM_WRITE_BUF_CAP (2 * DOOMGENERIC_SCREEN_BUF_SIZE)
 
 static struct {
     char data[COMM_WRITE_BUF_CAP];
@@ -240,17 +240,6 @@ static void Comm_Write16(uint16_t v)
 
     comm_send_buf.data[comm_send_buf.len++] = v & 0xff;
     comm_send_buf.data[comm_send_buf.len++] = (v >> 8) & 0xff;
-}
-
-static void Comm_Write24(uint32_t v)
-{
-    assert(comm_writing_msg);
-    if (comm_send_buf.len + 3 > COMM_WRITE_BUF_CAP)
-        Comm_FlushSend(false);
-
-    comm_send_buf.data[comm_send_buf.len++] = v & 0xff;
-    comm_send_buf.data[comm_send_buf.len++] = (v >> 8) & 0xff;
-    comm_send_buf.data[comm_send_buf.len++] = (v >> 16) & 0xff;
 }
 
 static void Comm_Write32(uint32_t v)
@@ -693,8 +682,8 @@ void DG_Init(void)
     // "AMSG_INIT": proto_version: u32, resx: u16, resy: u16
     COMM_WRITE_MSG({
         Comm_Write32(AMSG_PROTO_VERSION);
-        Comm_Write16(DOOMGENERIC_RESX);
-        Comm_Write16(DOOMGENERIC_RESY);
+        Comm_Write16(SCREENWIDTH);
+        Comm_Write16(SCREENHEIGHT);
     });
 }
 
@@ -704,8 +693,8 @@ void DG_DrawFrame(void)
         // Just send it over the socket.
         COMM_WRITE_MSG({
             Comm_Write8(AMSG_FRAME);
-            for (size_t i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; ++i)
-                Comm_Write24(DG_ScreenBuffer[i]);
+            Comm_WriteBytes((char *)DG_ScreenBuffer,
+                            DOOMGENERIC_SCREEN_BUF_SIZE);
         });
         screenvisible = false;
         return;

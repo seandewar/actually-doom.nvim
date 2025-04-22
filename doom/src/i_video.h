@@ -136,13 +136,6 @@ void I_EnableLoadingDisk(void);
 
 void I_EndRead(void);
 
-struct color {
-    uint32_t b : 8;
-    uint32_t g : 8;
-    uint32_t r : 8;
-    uint32_t a : 8;
-};
-
 extern char *video_driver;
 extern boolean screenvisible;
 

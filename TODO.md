@@ -1,5 +1,4 @@
 # High priority
-- [ ] Yeet unused alpha channel from DG_ScreenBuffer, make it endian-agnostic.
 - [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
   Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
   inputs...

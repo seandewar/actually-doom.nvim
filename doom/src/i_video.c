@@ -18,41 +18,23 @@
 //
 //-----------------------------------------------------------------------------
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "config.h"
 #include "doomgeneric.h"
 #include "i_video.h"
-#include "m_argv.h"
 #include "tables.h"
 #include "z_zone.h"
 
-struct FB_BitField {
-    uint32_t offset; /* beginning of bitfield   */
-    uint32_t length; /* length of bitfield              */
-};
-
-struct FB_ScreenInfo {
-    uint32_t xres; /* visible resolution                */
-    uint32_t yres;
-    uint32_t xres_virtual; /* virtual resolution                */
-    uint32_t yres_virtual;
-
-    uint32_t bits_per_pixel; /* guess what                      */
-
-    /* >1 = FOURCC                      */
-    struct FB_BitField red;   /* bitfield in s_Fb mem if true color, */
-    struct FB_BitField green; /* else only length is significant */
-    struct FB_BitField blue;
-    struct FB_BitField alpha; /* transparency                  */
-};
-
-static struct FB_ScreenInfo s_Fb;
-int fb_scaling = 1;
 int usemouse = 0;
 
-static struct color colors[256];
+typedef struct {
+    byte r;
+    byte g;
+    byte b;
+} col_t;
+
+static col_t colors[256];
 
 void I_GetEvent(void);
 
@@ -85,118 +67,31 @@ int mouse_threshold = 10;
 
 int usegamma = 0;
 
-typedef struct {
-    byte r;
-    byte g;
-    byte b;
-} col_t;
-
 // Palette converted to RGB565
 
 static uint16_t rgb565_palette[256];
 
-void cmap_to_rgb565(uint16_t *out, uint8_t *in, int in_pixels)
+void cmap_to_fb(byte *out, byte *in, int in_pixels)
 {
-    int i, j;
-    struct color c;
-    uint16_t r, g, b;
+    int i;
+    col_t c;
 
     for (i = 0; i < in_pixels; i++) {
-        c = colors[*in];
-        r = ((uint16_t)(c.r >> 3)) << 11;
-        g = ((uint16_t)(c.g >> 2)) << 5;
-        b = ((uint16_t)(c.b >> 3)) << 0;
-        *out = (r | g | b);
-
-        in++;
-        for (j = 0; j < fb_scaling; j++) {
-            out++;
-        }
-    }
-}
-
-void cmap_to_fb(uint8_t *out, uint8_t *in, int in_pixels)
-{
-    int i, k;
-    uint32_t j;
-    struct color c;
-    uint32_t pix;
-    uint16_t r, g, b, a;
-
-    for (i = 0; i < in_pixels; i++) {
-        c = colors[*in]; /* R:8 G:8 B:8 format! */
-        r = (uint16_t)(c.r >> (8 - s_Fb.red.length));
-        g = (uint16_t)(c.g >> (8 - s_Fb.green.length));
-        b = (uint16_t)(c.b >> (8 - s_Fb.blue.length));
-        a = (uint16_t)(c.a >> (8 - s_Fb.alpha.length));
-        pix = r << s_Fb.red.offset;
-        pix |= g << s_Fb.green.offset;
-        pix |= b << s_Fb.blue.offset;
-        pix |= a << s_Fb.alpha.offset;
-
-        for (k = 0; k < fb_scaling; k++) {
-            for (j = 0; j < s_Fb.bits_per_pixel / 8; j++) {
-                *out = (pix >> (j * 8));
-                out++;
-            }
-        }
-        in++;
+        c = colors[*in++]; /* R:8 G:8 B:8 format! */
+        *out++ = c.r;
+        *out++ = c.g;
+        *out++ = c.b;
     }
 }
 
 void I_InitGraphics(void)
 {
-    int i;
-
-    memset(&s_Fb, 0, sizeof(struct FB_ScreenInfo));
-    s_Fb.xres = DOOMGENERIC_RESX;
-    s_Fb.yres = DOOMGENERIC_RESY;
-    s_Fb.xres_virtual = s_Fb.xres;
-    s_Fb.yres_virtual = s_Fb.yres;
-
-    s_Fb.bits_per_pixel = 32;
-
-    s_Fb.blue.length = 8;
-    s_Fb.green.length = 8;
-    s_Fb.red.length = 8;
-    s_Fb.alpha.length = 8;
-
-    s_Fb.blue.offset = 16;
-    s_Fb.green.offset = 8;
-    s_Fb.red.offset = 0;
-    s_Fb.alpha.offset = 24;
-
-    printf("I_InitGraphics: framebuffer: x_res: %d, y_res: %d, x_virtual: %d, "
-           "y_virtual: %d, bpp: %d\n",
-           s_Fb.xres, s_Fb.yres, s_Fb.xres_virtual, s_Fb.yres_virtual,
-           s_Fb.bits_per_pixel);
-
-    printf("I_InitGraphics: framebuffer: RGBA: %d%d%d%d, red_off: %d, "
-           "green_off: %d, blue_off: %d, alpha_off: %d\n",
-           s_Fb.red.length, s_Fb.green.length, s_Fb.blue.length,
-           s_Fb.alpha.length, s_Fb.red.offset, s_Fb.green.offset,
-           s_Fb.blue.offset, s_Fb.alpha.offset);
-
     printf("I_InitGraphics: DOOM screen size: w x h: %d x %d\n", SCREENWIDTH,
            SCREENHEIGHT);
-
-    i = M_CheckParmWithArgs("-scaling", 1);
-    if (i > 0) {
-        i = atoi(myargv[i + 1]);
-        fb_scaling = i;
-        printf("I_InitGraphics: Scaling factor: %d\n", fb_scaling);
-    } else {
-        fb_scaling = s_Fb.xres / SCREENWIDTH;
-        if (s_Fb.yres / SCREENHEIGHT < (uint32_t)fb_scaling)
-            fb_scaling = s_Fb.yres / SCREENHEIGHT;
-        printf("I_InitGraphics: Auto-scaling factor: %d\n", fb_scaling);
-    }
 
     /* Allocate screen to draw to */
     I_VideoBuffer = (byte *)Z_Malloc(SCREENWIDTH * SCREENHEIGHT, PU_STATIC,
                                      NULL); // For DOOM to draw on
-
-    screenvisible = true;
 
     extern void I_InitInput(void);
     I_InitInput();
@@ -223,42 +118,17 @@ void I_UpdateNoBlit(void) {}
 void I_FinishUpdate(void)
 {
     int y;
-    int x_offset, y_offset, x_offset_end;
-    unsigned char *line_in, *line_out;
-
-    (void)y_offset;
-
-    /* Offsets in case FB is bigger than DOOM */
-    /* 600 = s_Fb heigt, 200 screenheight */
-    /* 600 = s_Fb heigt, 200 screenheight */
-    /* 2048 =s_Fb width, 320 screenwidth */
-    y_offset =
-        (((s_Fb.yres - (SCREENHEIGHT * fb_scaling)) * s_Fb.bits_per_pixel / 8))
-        / 2;
-    x_offset =
-        (((s_Fb.xres - (SCREENWIDTH * fb_scaling)) * s_Fb.bits_per_pixel / 8))
-        / 2; // XXX: siglent FB hack: /4 instead of /2, since it seems to handle
-             // the resolution in a funny way
-    // x_offset     = 0;
-    x_offset_end =
-        ((s_Fb.xres - (SCREENWIDTH * fb_scaling)) * s_Fb.bits_per_pixel / 8)
-        - x_offset;
+    byte *line_in, *line_out;
 
     /* DRAW SCREEN */
-    line_in = (unsigned char *)I_VideoBuffer;
+    line_in = I_VideoBuffer;
     line_out = (unsigned char *)DG_ScreenBuffer;
 
     y = SCREENHEIGHT;
 
     while (y--) {
-        int i;
-        for (i = 0; i < fb_scaling; i++) {
-            line_out += x_offset;
-            // cmap_to_rgb565((void*)line_out, (void*)line_in, SCREENWIDTH);
-            cmap_to_fb((void *)line_out, (void *)line_in, SCREENWIDTH);
-            line_out += (SCREENWIDTH * fb_scaling * (s_Fb.bits_per_pixel / 8))
-                        + x_offset_end;
-        }
+        cmap_to_fb(line_out, line_in, SCREENWIDTH);
+        line_out += SCREENWIDTH * 3; // R8G8B8 (3 bytes per pixel)
         line_in += SCREENWIDTH;
     }
 
@@ -302,7 +172,6 @@ void I_SetPalette(byte *palette)
      * map to the right pixel format over here! */
 
     for (i = 0; i < 256; ++i) {
-        colors[i].a = 0xff;
         colors[i].r = gammatable[usegamma][*palette++];
         colors[i].g = gammatable[usegamma][*palette++];
         colors[i].b = gammatable[usegamma][*palette++];

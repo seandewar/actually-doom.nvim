@@ -1,10 +1,9 @@
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "doomgeneric.h"
 #include "m_argv.h"
 
-pixel_t *DG_ScreenBuffer = NULL;
+byte *DG_ScreenBuffer = NULL;
 
 void M_FindResponseFile(void);
 void D_DoomMain(void);
