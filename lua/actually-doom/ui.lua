@@ -28,6 +28,7 @@ do
     if not doom or doom.closed then
       return
     end
+
     -- Keys modifiers may not be simplified in Terminal mode (e.g: ^\ received
     -- as K_SPECIAL ... KS_MODIFIER MOD_MASK_CTRL \) as a consequence of
     -- implementing kitty keyboard protocol support; simplify them.

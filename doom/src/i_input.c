@@ -14,6 +14,7 @@
 //
 
 #include <fcntl.h>
+#include <stdlib.h>
 
 #include "config.h"
 #include "d_event.h"
@@ -95,41 +96,49 @@ static void UpdateShiftStatus(int pressed, unsigned char key)
 
 void I_GetEvent(void)
 {
+    input_t input;
     event_t event;
-    int pressed;
-    unsigned char key;
 
-    while (DG_GetKey(&pressed, &key)) {
-        UpdateShiftStatus(pressed, key);
+    while (DG_GetInput(&input)) {
+        switch (input.type) {
+        case IN_KEYDOWN:
+        case IN_KEYUP: {
+            boolean pressed = input.type == IN_KEYDOWN;
+            unsigned char key = input.value;
 
-        // process event
+            UpdateShiftStatus(pressed, key);
 
-        if (pressed) {
-            // data1 has the key pressed, data2 has the character
-            // (shift-translated, etc)
-            event.type = ev_keydown;
-            event.data1 = key;
-            event.data2 = GetTypedChar(key);
+            if (pressed) {
+                // data1 has the key pressed, data2 has the character
+                // (shift-translated, etc)
+                event.type = ev_keydown;
+                event.data1 = key;
+                event.data2 = GetTypedChar(key);
+            } else {
+                event.type = ev_keyup;
+                event.data1 = key;
+
+                // data2 is just initialized to zero for ev_keyup.
+                // For ev_keydown it's the shifted Unicode character that was
+                // typed, but if something wants to detect key releases it
+                // should do so based on data1 (key ID), not the printable char.
+                event.data2 = 0;
+            }
 
             if (event.data1 != 0) {
                 D_PostEvent(&event);
             }
-        } else {
-            event.type = ev_keyup;
-            event.data1 = key;
+        } break;
 
-            // data2 is just initialized to zero for ev_keyup.
-            // For ev_keydown it's the shifted Unicode character
-            // that was typed, but if something wants to detect
-            // key releases it should do so based on data1
-            // (key ID), not the printable char.
-
-            event.data2 = 0;
-
-            if (event.data1 != 0) {
-                D_PostEvent(&event);
-            }
+        case IN_MOUSEBUTTONS:
+            event.type = ev_mouse;
+            event.data1 = input.value;
+            event.data2 = event.data3 = 0;
+            D_PostEvent(&event);
             break;
+
+        default:
+            abort();
         }
     }
 }

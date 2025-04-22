@@ -18,6 +18,7 @@
 #include "i_system.h"
 #include "i_video.h"
 #include "m_argv.h"
+#include "m_config.h"
 
 // Bump after a breaking change to the messaging protocol.
 #define AMSG_PROTO_VERSION 0
@@ -26,6 +27,10 @@
 
 #define NS_PER_MS (1000 * 1000)
 #define MS_PER_SEC 1000
+
+// Sentinel value from CMSG_PRESS_KEY indicating that the key is actually a
+// bitfield of currently pressed mouse buttons.
+#define PK_MOUSEBUTTONS 0xff
 
 // Message types are 8-bit values.
 // Strings are 16-bit lengths followed by 8-bit data (not NUL-terminated).
@@ -54,8 +59,15 @@ enum {
     // CMSG_SET_FRAME_SHM_NAME, name: string
     CMSG_SET_FRAME_SHM_NAME = 2,
 
-    // CMSG_PRESS_KEY, doomkey: u8, pressed: bool
+    // CMSG_PRESS_KEY, key: u8, pressed: u8
+    //   if pressed == PK_MOUSEBUTTONS: key is a bitfield of currently pressed
+    //                                  mouse buttons (see event_t in d_event.h)
+    //   else: key is a doomkey (see doomkeys.h), pressed is whether it's now
+    //         down or released.
     CMSG_PRESS_KEY = 1,
+
+    // CMSG_SET_CONFIG_VAR, name: string, value: string
+    CMSG_SET_CONFIG_VAR = 3,
 };
 
 static const char *listen_sock_path;
@@ -147,7 +159,7 @@ static boolean Ring_Read16(ringbuf_t *r, uint16_t *v)
     return true;
 }
 
-static boolean Ring_ReadBytes(ringbuf_t *r, char *p, size_t len)
+static boolean Ring_ReadBytes(ringbuf_t *r, byte *p, size_t len)
 {
     if (len == 0)
         return true;
@@ -210,8 +222,8 @@ static void Comm_FlushSend(boolean closing)
                 abort();
 
             default:
-                I_Error(LOG_PRE "Failed to send %zu byte(s) to "
-                                "communications socket: %s",
+                I_Error(LOG_PRE "Failed to send %zu byte(s) to communications "
+                                "socket: %s",
                         send_len, strerror(errno));
             }
         }
@@ -254,7 +266,7 @@ static void Comm_Write32(uint32_t v)
     comm_send_buf.data[comm_send_buf.len++] = (v >> 24) & 0xff;
 }
 
-static void Comm_WriteBytes(const char *p, size_t len)
+static void Comm_WriteBytes(const byte *p, size_t len)
 {
     assert(comm_writing_msg);
 
@@ -289,7 +301,7 @@ static void Comm_WriteString(const char *s)
     }
 
     Comm_Write16(len);
-    Comm_WriteBytes(s, len);
+    Comm_WriteBytes((byte *)s, len);
 }
 
 static void UnlinkFrameShm(void);
@@ -301,7 +313,7 @@ static void Comm_HandleReceivedMsgs(void)
         unsigned stage;
         uint8_t msg_type;
 
-        // Technically we can store the last value of a message on the stack,
+        // In some cases we can store the last value of a message on the stack,
         // but storing them here is less error-prone (and allows us to omit
         // braces in the switch cases lol)
         union {
@@ -311,9 +323,15 @@ static void Comm_HandleReceivedMsgs(void)
             } set_frame_shm_name;
 
             struct {
-                uint8_t doomkey;
+                uint8_t key;
                 uint8_t pressed;
             } press_key;
+
+            struct {
+                uint16_t len;
+                char name[64];
+                char value[128];
+            } set_config_var;
         } v;
     } state = {0};
 
@@ -337,8 +355,8 @@ static void Comm_HandleReceivedMsgs(void)
                                  &state.v.set_frame_shm_name.len))
                     return;
 
-                if (state.v.set_frame_shm_name.len + 1u // Include NUL.
-                    > arrlen(state.v.set_frame_shm_name.name)) {
+                if (state.v.set_frame_shm_name.len
+                    >= arrlen(state.v.set_frame_shm_name.name)) {
                     I_Error(LOG_PRE "Requested frame data shared memory object "
                                     "name too long; max: %zu, size: %" PRIu16,
                             arrlen(state.v.set_frame_shm_name.name)
@@ -350,7 +368,7 @@ static void Comm_HandleReceivedMsgs(void)
 
             case 2:
                 if (!Ring_ReadBytes(&comm_recv_buf,
-                                    state.v.set_frame_shm_name.name,
+                                    (byte *)state.v.set_frame_shm_name.name,
                                     state.v.set_frame_shm_name.len))
                     return;
                 // Not strictly needed as we're not doing string operations on
@@ -374,7 +392,7 @@ static void Comm_HandleReceivedMsgs(void)
         case CMSG_PRESS_KEY:
             switch (state.stage) {
             case 1:
-                if (!Ring_Read8(&comm_recv_buf, &state.v.press_key.doomkey))
+                if (!Ring_Read8(&comm_recv_buf, &state.v.press_key.key))
                     return;
                 ++state.stage;
                 // fallthrough
@@ -385,7 +403,7 @@ static void Comm_HandleReceivedMsgs(void)
 
                 if (Ring_GetLen(&key_buf) + 2 <= RINGBUF_CAP) {
                     boolean ok = true;
-                    ok = ok && Ring_Write8(&key_buf, state.v.press_key.doomkey);
+                    ok = ok && Ring_Write8(&key_buf, state.v.press_key.key);
                     ok = ok && Ring_Write8(&key_buf, state.v.press_key.pressed);
                     assert(ok);
                     (void)ok;
@@ -393,8 +411,73 @@ static void Comm_HandleReceivedMsgs(void)
                     fprintf(stderr,
                             LOG_PRE "Warning: Key buffer full; dropping "
                                     "received key %" PRIu8 " (%s)\n",
-                            state.v.press_key.doomkey,
+                            state.v.press_key.key,
                             state.v.press_key.pressed ? "down" : "up");
+                }
+                break;
+
+            default:
+                abort();
+            }
+            break;
+
+        case CMSG_SET_CONFIG_VAR:
+            switch (state.stage) {
+            case 1:
+                if (!Ring_Read16(&comm_recv_buf, &state.v.set_config_var.len))
+                    return;
+
+                if (state.v.set_config_var.len
+                    >= arrlen(state.v.set_config_var.name)) {
+                    I_Error(LOG_PRE "Requested config variable name too long; "
+                                    "max: %zu, size: %" PRIu16,
+                            arrlen(state.v.set_config_var.name)
+                                - 1, // Exclude NUL.
+                            state.v.set_config_var.len);
+                }
+                ++state.stage;
+                // fallthrough
+
+            case 2:
+                if (!Ring_ReadBytes(&comm_recv_buf,
+                                    (byte *)state.v.set_config_var.name,
+                                    state.v.set_config_var.len))
+                    return;
+                state.v.set_config_var.name[state.v.set_config_var.len] = '\0';
+                ++state.stage;
+                // fallthrough
+
+            case 3:
+                if (!Ring_Read16(&comm_recv_buf, &state.v.set_config_var.len))
+                    return;
+
+                if (state.v.set_config_var.len
+                    >= arrlen(state.v.set_config_var.value)) {
+                    I_Error(LOG_PRE "Requested config variable value too long; "
+                                    "max: %zu, size: %" PRIu16,
+                            arrlen(state.v.set_config_var.value)
+                                - 1, // Exclude NUL.
+                            state.v.set_config_var.len);
+                }
+                ++state.stage;
+                // fallthrough
+
+            case 4:
+                if (!Ring_ReadBytes(&comm_recv_buf,
+                                    (byte *)state.v.set_config_var.value,
+                                    state.v.set_config_var.len))
+                    return;
+                state.v.set_config_var.value[state.v.set_config_var.len] = '\0';
+
+                printf("CMSG_SET_CONFIG_VAR: name=\"%s\", value=\"%s\"\n",
+                       state.v.set_config_var.name,
+                       state.v.set_config_var.value);
+                if (!M_SetVariable(state.v.set_config_var.name,
+                                   state.v.set_config_var.value)) {
+                    fprintf(stderr,
+                            LOG_PRE "Warning: Failed to set config variable "
+                                    "\"%s\"; maybe it isn't bound\n",
+                            state.v.set_config_var.name);
                 }
                 break;
 
@@ -532,7 +615,8 @@ static void CloseFrameShm(void)
 
 static void UnlinkFrameShm(void)
 {
-    if (frame_shm_name[0] != '\0' && shm_unlink(frame_shm_name) == -1) {
+    if (frame_shm_name[0] != '\0' && shm_unlink(frame_shm_name) == -1
+        && errno != ENOENT) { // May have been unlinked already by the client.
         fprintf(
             stderr,
             LOG_PRE
@@ -661,8 +745,8 @@ void DG_Init(void)
             break;
 
         default:
-            I_Error(LOG_PRE "Unexpected error while listening for "
-                            "connections: %s",
+            I_Error(LOG_PRE "Unexpected error while listening for connections: "
+                            "%s",
                     strerror(errno));
         }
     }
@@ -693,8 +777,7 @@ void DG_DrawFrame(void)
         // Just send it over the socket.
         COMM_WRITE_MSG({
             Comm_Write8(AMSG_FRAME);
-            Comm_WriteBytes((char *)DG_ScreenBuffer,
-                            DOOMGENERIC_SCREEN_BUF_SIZE);
+            Comm_WriteBytes(DG_ScreenBuffer, DOOMGENERIC_SCREEN_BUF_SIZE);
         });
         screenvisible = false;
         return;
@@ -746,24 +829,35 @@ void DG_DrawFrame(void)
     screenvisible = false;
 }
 
-int DG_GetKey(int *pressed, unsigned char *key)
+boolean DG_GetInput(input_t *input)
 {
-    uint8_t k, p;
-    if (!Ring_Read8(&key_buf, &k))
-        return 0;
+    uint8_t key, pressed;
+    if (!Ring_Read8(&key_buf, &key))
+        return false;
 
-    boolean ok = Ring_Read8(&key_buf, &p);
+    boolean ok = Ring_Read8(&key_buf, &pressed);
     assert(ok);
     (void)ok;
 
+    if (pressed == PK_MOUSEBUTTONS) {
+        // key is instead a bitfield of currently pressed mouse buttons.
+        *input = (input_t){
+            .type = IN_MOUSEBUTTONS,
+            .value = key,
+        };
+        return true;
+    }
+
     // DOOM expects alphabetic keys in lower-case. tolower is cringe and uses
     // locale information, so don't bother with it; we can do it quicker anyway.
-    if (k >= 'A' && k <= 'Z')
-        k = k - 'A' + 'a';
+    if (key >= 'A' && key <= 'Z')
+        key = key - 'A' + 'a';
 
-    *key = k;
-    *pressed = p;
-    return 1;
+    *input = (input_t){
+        .type = pressed ? IN_KEYDOWN : IN_KEYUP,
+        .value = key,
+    };
+    return true;
 }
 
 void DG_SleepMs(uint32_t ms)

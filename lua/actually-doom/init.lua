@@ -59,15 +59,37 @@ end)()
 --- @field send_buf string.buffer
 --- @field check_timer uv.uv_timer_t
 --- @field pressed_key PressedKey?
+--- @field mouse_button_mask integer
 --- @field screen Screen?
 --- @field closed boolean?
 ---
 --- @field run function
 local Doom = {}
 
+--- @param buf string.buffer
+--- @param s string
+--- @return string.buffer
+local function put_string(buf, s)
+  assert(#s <= 65535)
+  return buf:put(
+    string.char(bit.band(#s, 255)),
+    string.char(bit.rshift(#s, 8)),
+    s
+  )
+end
+
 function Doom:send_frame_request()
   -- CMSG_WANT_FRAME (no payload)
   self.send_buf:put "\0"
+end
+
+--- @param name string
+--- @param value string
+function Doom:send_set_config_var(name, value)
+  -- CMSG_SET_CONFIG_VAR
+  self.send_buf:put "\3"
+  put_string(self.send_buf, name)
+  put_string(self.send_buf, value)
 end
 
 --- Schedules a check to happen in approximately `ms` milliseconds from now.
@@ -108,41 +130,45 @@ function Doom:send_key(doomkey, pressed)
   self.send_buf:put("\1", string.char(doomkey), pressed and "\1" or "\0")
 end
 
+function Doom:send_mouse_buttons()
+  -- CMSG_PRESS_KEY, but using PK_MOUSEBUTTONS to indicate a mouse button mask.
+  self.send_buf:put("\1", string.char(self.mouse_button_mask), "\255")
+end
+
 --- @param info PressedKey?
 function Doom:press_key(info)
   if self.pressed_key then
-    if not info or self.pressed_key.key ~= info.key then
-      self:send_key(self.pressed_key.key, false)
-    end
-    if not info or self.pressed_key.shift ~= info.shift then
+    -- Always unpress the key, even if it's the same key being pressed again.
+    -- This makes movement in the terminal more responsive.
+    self:send_key(self.pressed_key.key, false)
+
+    if self.pressed_key.shift and not (info or {}).shift then
       self:send_key(M.key.rshift, false)
     end
-    if not info or self.pressed_key.alt ~= info.alt then
+    if self.pressed_key.alt and not (info or {}).alt then
       self:send_key(M.key.ralt, false)
     end
-    self.pressed_key = nil
   end
 
   if info then
+    -- Similar to above, always press the key to make things more responsive in
+    -- the terminal. In particular, this improves responsiveness in the menu.
     self:send_key(info.key, true)
-    if info.shift then
+
+    if info.shift and not (self.pressed_key or {}).shift then
       self:send_key(M.key.rshift, true)
     end
-    if info.alt then
+    if info.alt and not (self.pressed_key or {}).alt then
       self:send_key(M.key.ralt, true)
     end
-    self.pressed_key = info
   end
+  self.pressed_key = info
 end
 
 do
   local special_to_doomkey = {
     [vim.keycode "<BS>"] = M.key.backspace,
     [vim.keycode "<Space>"] = M.key.use,
-    -- TODO: though it can be specified, RMB isn't great as it leaves Terminal
-    -- mode; and <2-RightMouse> (double-clicking to use, like Vanilla) can't
-    -- work for a similar reason.
-    [vim.keycode "<RightMouse>"] = M.key.use,
     [vim.keycode "<Left>"] = M.key.leftarrow,
     [vim.keycode "<Up>"] = M.key.uparrow,
     [vim.keycode "<Right>"] = M.key.rightarrow,
@@ -184,18 +210,40 @@ do
     return key, false
   end
 
-  local left_mouse = vim.keycode "<LeftMouse>"
-  local left_release = vim.keycode "<LeftRelease>"
+  local mouse_button_bit = {
+    ["Left"] = 1,
+    ["Right"] = 2,
+    ["Middle"] = 4,
+  }
 
   --- @param key string
   function Doom:press_vim_key(key)
-    -- Special cases: unlike other terminal "keys", mouse clicks report
-    -- push/release events, so we can use their state exactly.
-    if key == left_mouse or key == left_release then
-      self:press_key(nil)
-      self:send_key(M.key.fire, key == left_mouse)
-      self:schedule_check()
-      return "" -- Consume the clicks.
+    local keycode = fn.keytrans(key)
+    local mouse_prefix_i = keycode:find("Mouse>", 1, true)
+      or keycode:find("Release>", 1, true)
+    if mouse_prefix_i then
+      -- Unlike other terminal "keys", mouse buttons report push/release events,
+      -- which is nice. :-]
+      local button = keycode:sub(1, mouse_prefix_i - 1):match ".*[-<](%w+)"
+      local button_bit = mouse_button_bit[button]
+      local pressed = keycode:byte(mouse_prefix_i) == 77 -- M(ouse)
+
+      local old_mask = self.mouse_button_mask
+      if pressed then
+        self.mouse_button_mask = bit.bor(self.mouse_button_mask, button_bit)
+      else
+        self.mouse_button_mask =
+          bit.band(self.mouse_button_mask, bit.bnot(button_bit))
+      end
+
+      if self.mouse_button_mask ~= old_mask then
+        self:press_key(nil)
+        self:send_mouse_buttons()
+        self:schedule_check()
+      end
+      -- Consume the clicks. Especially important for quashing Nvim's default
+      -- handling of double/multi clicks.
+      return ""
     end
 
     -- I don't think CTRL is used in combination with other keys in Vanilla DOOM
@@ -205,15 +253,14 @@ do
     local doomkey
     -- Until https://github.com/neovim/neovim/issues/26575 is implemented, we
     -- need to parse keycodes ourselves.
-    if #key == 1 and printable(key:byte()) then
+    if #keycode == 1 then
       doomkey, shift = lower(key:byte())
     else
       -- Easiest to parse these using the printable representation via keytrans;
       -- it should return modifiers in uppercase, with "M" being used for Alt
       -- (not "A", though both are supported by Nvim).
-      local keycode = fn.keytrans(key)
-      shift = keycode:find "S%-" ~= nil
-      alt = keycode:find "M%-" ~= nil
+      shift = keycode:find("S-", 1, true) ~= nil
+      alt = keycode:find("M-", 1, true) ~= nil
       key = keycode:match ".*[-<](.+)>" or keycode
       if #key == 1 and printable(key:byte()) then
         doomkey, _ = lower(key:byte()) -- Shift was set from keycode modifiers.
@@ -227,13 +274,6 @@ do
     end
     if not doomkey then
       return
-    elseif doomkey == 120 then -- x
-      -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only
-      -- available as a modifier to other keys), so use X.
-      -- TODO: consider doing this by setting the config variable for firing,
-      -- though we'll want to move LMB handling to use a mouse click rather than
-      -- sending the fire key to avoid breaking it.
-      doomkey = M.key.fire
     end
 
     if
@@ -262,18 +302,6 @@ do
     self:schedule_check()
     return "" -- We handled the key, so eat it (yum!)
   end
-end
-
---- @param buf string.buffer
---- @param s string
---- @return string.buffer
-local function put_string(buf, s)
-  assert(#s <= 65535)
-  return buf:put(
-    string.char(bit.band(#s, 255)),
-    string.char(bit.rshift(#s, 8)),
-    s
-  )
 end
 
 --- @param on boolean?
@@ -446,10 +474,13 @@ local function recv_msg_loop(doom, buf)
   end
 
   doom.screen = require("actually-doom.ui").Screen.new(doom, resx, resy)
+  -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only available
+  -- as a modifier for other keys), so use X.
+  doom:send_set_config_var("key_fire", "45") -- DOS scancode for x.
   if doom.screen.visible then
     doom:send_frame_request()
-    doom:schedule_check()
   end
+  doom:schedule_check()
 
   --- @type table<integer, fun(): boolean?>
   local msg_handlers = {
@@ -601,6 +632,7 @@ function Doom.run()
   local doom = setmetatable({
     check_timer = assert(uv.new_timer()),
     send_buf = require("string.buffer").new(256),
+    mouse_button_mask = 0,
   }, { __index = Doom })
   doom.console = require("actually-doom.ui").Console.new(doom)
 

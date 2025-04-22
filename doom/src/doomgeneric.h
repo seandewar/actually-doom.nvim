@@ -1,9 +1,10 @@
 #ifndef DOOM_GENERIC
 #define DOOM_GENERIC
 
+#include <stdint.h>
+
 #include "doomtype.h"
 #include "i_video.h"
-#include <stdint.h>
 
 #define DOOMGENERIC_SCREEN_BUF_SIZE (SCREENWIDTH * SCREENHEIGHT * 3)
 
@@ -13,13 +14,26 @@ extern byte *DG_ScreenBuffer;
 void doomgeneric_Create(int argc, char **argv);
 void doomgeneric_Tick(void);
 
+typedef struct {
+    enum {
+        IN_KEYDOWN,
+        IN_KEYUP,
+        IN_MOUSEBUTTONS,
+    } type;
+
+    // If type == IN_KEY*: key code (from doomkeys.h).
+    // If type == IN_MOUSEBUTTONS: bitfield of mouse buttons.
+    // See the comment in d_event.h within event_t for more info.
+    byte value;
+} input_t;
+
 // Implement below functions for your platform
 void DG_Init(void);
 void DG_WipeTick(void);
 void DG_DrawFrame(void);
 void DG_SleepMs(uint32_t ms);
 uint32_t DG_GetTicksMs(void);
-int DG_GetKey(int *pressed, unsigned char *key);
+boolean DG_GetInput(input_t *input);
 void DG_SetWindowTitle(const char *title);
 
 #endif // DOOM_GENERIC
