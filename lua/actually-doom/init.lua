@@ -297,7 +297,7 @@ do
       key = doomkey,
       shift = shift,
       alt = alt,
-      release_time = uv.now() + 375,
+      release_time = uv.now() + 350,
     }
     self:schedule_check()
     return "" -- We handled the key, so eat it (yum!)
@@ -347,7 +347,7 @@ function Doom:flush_send()
     if err then
       self.console:plugin_print(
         ("Failed to send %d byte(s); quitting: %s\n"):format(#data, err),
-        "ErrorMsg"
+        "Error"
       )
       self:close()
     end
@@ -359,18 +359,15 @@ end
 --- @param doom Doom
 --- @param sock_path string
 local function init_process(doom, sock_path)
-  --- @param msg_hl string?
+  --- @param console_hl string?
   --- @return fun(err: nil|string, data: string|nil)
   --- @nodiscard
-  local function new_out_cb(msg_hl)
+  local function new_out_cb(console_hl)
     return function(err, data)
       if err then
-        doom.console:plugin_print(
-          ("Stream error: %s\n"):format(err),
-          "ErrorMsg"
-        )
+        doom.console:plugin_print(("Stream error: %s\n"):format(err), "Error")
       elseif data then
-        doom.console:print(data, msg_hl)
+        doom.console:print(data, console_hl)
       end
     end
   end
@@ -383,12 +380,12 @@ local function init_process(doom, sock_path)
     fs.joinpath(script_dir, "../../doom/DOOM1.WAD"),
   }, {
     stdout = new_out_cb(),
-    stderr = new_out_cb "WarningMsg",
+    stderr = new_out_cb "Warn",
   }, function(out)
     doom.console:print "\n"
     doom.console:plugin_print(
       ("DOOM (PID %d) exited with code %d\n"):format(doom.process.pid, out.code),
-      out.code ~= 0 and "ErrorMsg" or nil
+      out.code ~= 0 and "Error" or nil
     )
     doom:close()
   end)
@@ -458,7 +455,7 @@ local function recv_msg_loop(doom, buf)
       resx,
       resy
     ),
-    "Comment"
+    "Debug"
   )
 
   if proto_version ~= supported_proto_version then
@@ -467,7 +464,7 @@ local function recv_msg_loop(doom, buf)
         "DOOM process reports incompatible message protocol version %d "
         .. "(expected %d); please rebuild the DOOM executable. Quitting\n"
       ):format(proto_version, supported_proto_version),
-      "ErrorMsg"
+      "Error"
     )
     doom:close()
     return
@@ -520,7 +517,7 @@ local function recv_msg_loop(doom, buf)
       doom.screen.title = read_string()
       doom.console:plugin_print(
         ('AMSG_SET_TITLE: title="%s"\n'):format(doom.screen.title),
-        "Comment"
+        "Debug"
       )
       doom.screen:update_title()
     end,
@@ -543,7 +540,7 @@ local function recv_msg_loop(doom, buf)
     else
       doom.console:plugin_print(
         ("Received unknown message type: %d; quitting\n"):format(msg_type),
-        "ErrorMsg"
+        "Error"
       )
       doom:close()
       return
@@ -567,12 +564,12 @@ local function init_connection(doom, sock_path)
           "Failed to connect to the DOOM process: %s "
           .. "(%d attempt(s) left)\n"
         ):format(conn_err, tries_left),
-        "WarningMsg"
+        "Warn"
       )
       if tries_left <= 0 then
         doom.console:plugin_print(
           "No connection attempts remaining; giving up\n",
-          "ErrorMsg"
+          "Error"
         )
         doom:close()
         return
@@ -594,7 +591,7 @@ local function init_connection(doom, sock_path)
       if read_err then
         doom.console:plugin_print(
           ("Read error; quitting: %s\n"):format(read_err),
-          "ErrorMsg"
+          "Error"
         )
         doom:close()
         return
@@ -723,7 +720,7 @@ function Doom:close_on_err(f, ...)
     vim.schedule(function()
       self.console:plugin_print(
         ("Quitting after unexpected error: %s\n"):format(nrvs_or_err),
-        "ErrorMsg"
+        "Error"
       )
       self:close()
     end)

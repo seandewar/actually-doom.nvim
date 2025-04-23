@@ -30,7 +30,7 @@ do
     end
 
     -- Keys modifiers may not be simplified in Terminal mode (e.g: ^\ received
-    -- as K_SPECIAL ... KS_MODIFIER MOD_MASK_CTRL \) as a consequence of
+    -- as K_SPECIAL ... KS_MODIFIER MOD_MASK_CTRL \) as a consequence of Nvim
     -- implementing kitty keyboard protocol support; simplify them.
     key = vim.keycode(fn.keytrans(key))
     if key == ctrl_bs or key == ctrl_n or key == ctrl_o then
@@ -38,12 +38,20 @@ do
     elseif key == ctrl_k then
       -- Toggle kitty graphics protocol support.
       doom:enable_kitty(doom.screen.gfx.type ~= "kitty")
+      doom.console:plugin_print(
+        ("kitty graphics protocol %s\n"):format(
+          doom.screen.gfx.type == "kitty" and "ON" or "OFF"
+        )
+      )
       return "" -- Nom nom nom
     elseif key == ctrl_t then
       -- Toggle tmux passthrough support.
-      -- TODO: don't allow this to be toggled, it only makes sense to set it
-      -- *before* we send/recv frames
       doom.screen.tmux_passthrough = not doom.screen.tmux_passthrough
+      doom.console:plugin_print(
+        ("tmux passthrough %s\n"):format(
+          doom.screen.tmux_passthrough and "ON" or "OFF"
+        )
+      )
       return "" -- *crunch*
     end
 
@@ -89,11 +97,11 @@ api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
         doom.screen.visible = vim.list_contains(bufs, buf)
 
         if not old_visible and doom.screen.visible then
-          doom.console:plugin_print("Game visible; redraws ON\n", "Comment")
+          doom.console:plugin_print("Game visible; redraws ON\n", "Debug")
           doom:send_frame_request()
           doom:schedule_check()
         elseif old_visible and not doom.screen.visible then
-          doom.console:plugin_print("Game hidden; redraws OFF\n", "Comment")
+          doom.console:plugin_print("Game hidden; redraws OFF\n", "Debug")
         end
       end
     end
@@ -235,6 +243,23 @@ api.nvim_create_autocmd("WinClosed", {
   desc = "[actually-doom.nvim] Print hint when all screens in tabpage close",
 })
 
+api.nvim_set_hl(0, "DoomConsoleError", {
+  default = true,
+  link = "ErrorMsg",
+})
+api.nvim_set_hl(0, "DoomConsoleWarn", {
+  default = true,
+  link = "WarningMsg",
+})
+api.nvim_set_hl(0, "DoomConsolePlugin", {
+  default = true,
+  link = "Special",
+})
+api.nvim_set_hl(0, "DoomConsoleDebug", {
+  default = true,
+  link = "Comment",
+})
+
 --- @class (exact) HlExtmark
 --- @field id integer
 --- @field hl string
@@ -336,14 +361,14 @@ function Console:update_buf_name()
 end
 
 --- @param text string
---- @param hl string?
-function Console:print(text, hl)
+--- @param console_hl string?
+function Console:print(text, console_hl)
   if text == "" then
     return
   end
   if vim.in_fast_event() then
     vim.schedule(function()
-      self:print(text, hl)
+      self:print(text, console_hl)
     end)
     return
   end
@@ -369,7 +394,8 @@ function Console:print(text, hl)
     self.last_col = #lines[#lines]
   end
 
-  if self.last_extmark and self.last_extmark.hl == hl then
+  console_hl = console_hl and ("DoomConsole" .. console_hl) or nil
+  if self.last_extmark and self.last_extmark.hl == console_hl then
     -- Same highlight as the last extmark; extend its range.
     api.nvim_buf_set_extmark(
       self.buf,
@@ -378,23 +404,23 @@ function Console:print(text, hl)
       self.last_extmark.start_col,
       {
         id = self.last_extmark.id,
-        hl_group = hl,
+        hl_group = console_hl,
         end_row = self.last_row,
         end_col = self.last_col,
       }
     )
-  elseif hl then
+  elseif console_hl then
     -- Last extmark has a different highlight or doesn't exist; can't reuse it.
     local id =
       api.nvim_buf_set_extmark(self.buf, ns, prev_last_row, prev_last_col, {
-        hl_group = hl,
+        hl_group = console_hl,
         end_row = self.last_row,
         end_col = self.last_col,
       })
 
     self.last_extmark = {
       id = id,
-      hl = hl,
+      hl = console_hl,
       start_row = prev_last_row,
       start_col = prev_last_col,
     }
@@ -418,9 +444,9 @@ end
 
 --- @see Console.print
 --- @param text string
---- @param hl string? If nil, defaults to "Special"
-function Console:plugin_print(text, hl)
-  return self:print("[actually-doom.nvim] " .. text, hl or "Special")
+--- @param console_hl string? If nil, defaults to "Plugin"
+function Console:plugin_print(text, console_hl)
+  return self:print("[actually-doom.nvim] " .. text, console_hl or "Plugin")
 end
 
 --- @class (exact) Gfx
