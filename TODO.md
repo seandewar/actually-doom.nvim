@@ -5,6 +5,7 @@
 - [ ] Automatic rebuilding of the executable.
 - [ ] IWAD selection.
 - [ ] Plugin configuration.
+- [ ] vimdoc.
 
 # Medium Priority
 - [ ] Implement music, maybe in the executable.
