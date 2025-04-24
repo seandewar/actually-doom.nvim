@@ -451,7 +451,7 @@ end
 
 --- @class (exact) Gfx
 --- @field new fun(Screen, ...): Gfx
---- @field close fun(Gfx)?
+--- @field close fun(Gfx)
 --- @field refresh fun(Gfx, ...)
 --- @field type string
 
@@ -485,6 +485,11 @@ function Screen.new(doom, resx, resy)
     resx = resx,
     resy = resy,
   }, { __index = Screen })
+
+  if os.getenv "TMUX" then
+    doom.console:plugin_print "$TMUX is set; tmux passthrough ON\n"
+    screen.tmux_passthrough = true
+  end
 
   local function create_ui()
     -- It's possible we were closed beforehand if this operation was scheduled.
@@ -540,9 +545,7 @@ function Screen:close()
     return
   end
 
-  if self.gfx.close then
-    self.gfx:close()
-  end
+  self.gfx:close()
   if self.buf then
     M.screen_buf_to_doom[self.buf] = nil
     if api.nvim_buf_is_valid(self.buf) then
@@ -553,9 +556,7 @@ end
 
 --- @param gfx Gfx
 function Screen:set_gfx(gfx, ...)
-  if self.gfx.close then
-    self.gfx:close()
-  end
+  self.gfx:close()
   self.gfx = gfx.new(self, ...)
 end
 

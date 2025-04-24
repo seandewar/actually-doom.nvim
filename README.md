@@ -34,8 +34,8 @@ _Mostly_ the same as vanilla DOOM (see the in-game help menu); mainly:
 
 Additionally (continue reading for details):
 
-- `CTRL-K` to enable kitty graphics in a supported terminal.
-- `CTRL-T` to enable passthrough support in tmux.
+- `CTRL-K` to toggle kitty graphics in a supported terminal.
+- `CTRL-T` to toggle tmux passthrough support.
 
 ### Kitty graphics protocol
 
@@ -50,11 +50,13 @@ this does _not_ work remotely (e.g: over [SSH](https://en.wikipedia.org/wiki/Sec
 #### Kitty graphics in tmux
 
 To use the kitty graphics protocol within [tmux](https://github.com/tmux/tmux),
-enable passthrough support (e.g: `set -g allow-passthrough on` in tmux v3.3+)
-and press `CTRL-T` in-game.
+enable passthrough support (e.g: `set -g allow-passthrough on` in tmux v3.3+).
 
 Note that the host terminal must still support the graphics protocol for this to
 be effective.
+
+actually-doom.nvim automatically uses passthrough sequences if `$TMUX` is set,
+but it can be toggled manually by pressing `CTRL-T` in-game.
 
 ## FAQ
 

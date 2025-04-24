@@ -32,6 +32,10 @@ function M.new(screen)
   }, { __index = M })
 end
 
+function M:close()
+  -- No-op.
+end
+
 -- https://gist.github.com/MicahElliott/719710?permalink_comment_id=1442838#gistcomment-1442838
 -- Keep this sorted.
 local cube_levels = { 0, 95, 135, 175, 215, 255 }
