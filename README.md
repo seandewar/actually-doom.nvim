@@ -18,45 +18,16 @@ Install it via your favourite package manager like any other plugin, then run
 The [shareware version](https://www.doomworld.com/classicdoom/info/shareware.php)
 of DOOM is included for your convenience.
 
-### Controls
-
-_Mostly_ the same as vanilla DOOM (see the in-game help menu); mainly:
-
-- `Enter`/`Return` to select menu options.
-- `X` to fire. _(Vanilla DOOM uses `CTRL`, which is only usable as a modifier
-  within the terminal)_
-- `Space` to interact with objects. _(Open doors, etc.)_
-- Arrow keys to move and turn.
-- Hold `Shift` with the arrow keys to sprint.
-- Hold `Alt` with the arrow keys to strafe.
-- Number keys to switch between weapons in your inventory.
-- `Tab` to open the [automap](https://doomwiki.org/wiki/Automap).
-
-Additionally (continue reading for details):
-
-- `CTRL-K` to toggle kitty graphics in a supported terminal.
-- `CTRL-T` to toggle tmux passthrough support.
+For more information regarding controls and such, consult
+`:help actually-doom.txt`.
 
 ### Kitty graphics protocol
 
 Though optional, the game is best experienced in a terminal that implements the
-[kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
-with [Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders)
-support. Press `CTRL-K` in-game to enable.
+kitty graphics protocol with Unicode placeholder support.
 
-Because shared memory is used to transmit frame data for performance reasons,
-this does _not_ work remotely (e.g: over [SSH](https://en.wikipedia.org/wiki/Secure_Shell)).
-
-#### Kitty graphics in tmux
-
-To use the kitty graphics protocol within [tmux](https://github.com/tmux/tmux),
-enable passthrough support (e.g: `set -g allow-passthrough on` in tmux v3.3+).
-
-Note that the host terminal must still support the graphics protocol for this to
-be effective.
-
-actually-doom.nvim automatically uses passthrough sequences if `$TMUX` is set,
-but it can be toggled manually by pressing `CTRL-T` in-game.
+See `:h actually-doom-kitty` for details. (And `:h actually-doom-tmux` if using
+tmux)
 
 ## FAQ
 

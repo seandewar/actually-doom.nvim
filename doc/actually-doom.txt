@@ -1,0 +1,129 @@
+*actually-doom.txt*	Actually play DOOM in your favourite text editor!
+
+Author:  Sean Dewar <https://github.com/seandewar>
+License: GPL-2.0
+
+Includes the shareware version of DOOM v1.9 for your convenience.
+
+==============================================================================
+PREREQUISITES					*actually-doom-prerequisites*
+
+To use this plugin, the following is required:
+
+- Neovim v0.11+ with the LuaJIT `string.buffer` library. (Available in typical
+  Neovim installations)
+- Linux.
+- C compiler with support for the C99 standard.
+
+==============================================================================
+COMMANDS					*actually-doom-commands*
+
+						*:Doom*
+:[N]Doom[!]		Play DOOM.  If [N] is given, it is the buffer number
+			of an existing screen to switch to.  If [!] is
+			present, then a new instance of DOOM is started
+			regardless of whether one is already running.
+
+==============================================================================
+GAME CONTROLS				*actually-doom-game-controls*
+
+Controls are similar to vanilla DOOM's, which can be viewed via the in-game
+help menu.  The most important are:
+
+						*actually-doom_<Esc>*
+<Esc>			Toggle the menu.
+
+						*actually-doom_<CR>*
+<CR>			Select menu option.
+
+						*actually-doom_x*
+x			Fire equipped weapon.
+
+			NOTE: Vanilla DOOM uses <CTRL> for this, but Nvim (and
+			many terminals) can't detect a lone <CTRL> that wasn't
+			used as a modifier for a different key.
+
+						*actually-doom_<Space>*
+<Space>			Use button: open doors, activate switches, etc.
+
+			   *actually-doom_<Up>* *actually-doom_<Down>*
+<Up> <Down>		Move in the pressed direction.
+			 *actually-doom_<S-Up>* *actually-doom_<S-Down>*
+<S-Up> <S-Down>		When combined with shift, sprint instead.
+
+			 *actually-doom_<Left>* *actually-doom_<Right>*
+<Left> <Right>		Turn towards the pressed direction.
+		       *actually-doom_<S-Left>* *actually-doom_<S-Right>*
+<S-Left> <S-Right>	When combined with shift, quickly turn instead.
+		       *actually-doom_<M-Left>* *actually-doom_<M-Right>*
+<M-Left> <M-Right>	When combined with meta (alt), strafe instead.
+
+						*actually-doom_number*
+0 - 8			Equip a different weapon from your inventory.
+
+						*actually-doom_<Tab>*
+<Tab>			Open the level automap.
+
+
+PLUGIN CONTROLS				*actually-doom-plugin-controls*
+
+The following controls are available for toggling plugin-specific features:
+
+						*actually-doom_<C-K>*
+CTRL-K			Toggle kitty graphics protocol support.  This works
+			only in supported terminals.  |actually-doom-kitty|
+
+						*actually-doom_<C-T>*
+CTRL-T			Toggle tmux passthrough support. |actually-doom-tmux|
+
+==============================================================================
+KITTY GRAPHICS PROTOCOL				*actually-doom-kitty*
+
+Though optional, the game is best experienced in a terminal that implements
+the kitty graphics protocol with support for Unicode placeholders.
+(https://sw.kovidgoyal.net/kitty/graphics-protocol)
+
+In a supported terminal, it can be toggled in-game by pressing CTRL-K.
+
+Because shared memory is used to transmit frame data for performance reasons,
+this does NOT work remotely! (E.g: SSH)
+
+
+TMUX PASSTHROUGH				*actually-doom-tmux*
+
+Passthrough sequences are supported for tmux, which must be enabled to use
+kitty graphics under tmux.  For tmux v3.3+, it can be turned on using
+`set -g allow-passthrough on`.
+
+Note that the host terminal must still support the graphics protocol for this
+to be effective.
+
+actually-doom.nvim automatically uses passthrough sequences if the `$TMUX`
+environment variable is set, but it can be toggled manually by pressing CTRL-T
+in-game.
+
+==============================================================================
+HIGHLIGHT GROUPS				*actually-doom-highlights*
+
+The following |:hi-default| definitions exist for use in console buffers:
+
+						*hl-DoomConsoleError*
+DoomConsoleError	Error messages.
+
+						*hl-DoomConsoleWarn*
+DoomConsoleWarn		Warning messages.
+
+						*hl-DoomConsolePlugin*
+DoomConsolePlugin	General plugin-specific messages.
+
+						*hl-DoomConsoleDebug*
+DoomConsoleDebug	Messages useful for debugging actually-doom.
+
+==============================================================================
+ABOUT						*actually-doom-about*
+
+Grab the latest version or report a bug on GitHub:
+
+https://github.com/seandewar/actually-doom.nvim
+
+ vim:tw=78:ts=8:sw=0:noet:ft=help:norl:
