@@ -75,6 +75,8 @@ extern lighttable_t *fixedcolormap;
 //  0 = high, 1 = low
 extern int detailshift;
 
+extern int detached_ui;
+
 //
 // Function pointers to switch refresh/drawing functions.
 // Used to select shadow mode etc.

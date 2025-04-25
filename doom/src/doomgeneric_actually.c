@@ -38,8 +38,11 @@
 // Integer values are sent as little-endian (network byte order considered
 // cringe).
 enum {
-    // AMSG_FRAME, pixels: u24[resx * resy] (BGR)
+    // AMSG_FRAME, pixels: u24[resx * resy] (R8G8B8)
     AMSG_FRAME = 0,
+
+    // AMSG_FRAME_HU_TEXT_LINE, x: i16, y: i16, line: string, drawcursor: u8
+    AMSG_FRAME_HU_TEXT_LINE = 4,
 
     // AMSG_FRAME_SHM_READY (no payload)
     AMSG_FRAME_SHM_READY = 3,
@@ -287,6 +290,12 @@ static void Comm_WriteBytes(const byte *p, size_t len)
     }
 }
 
+static void Comm_WriteBytesWithLen(const byte *b, uint16_t len)
+{
+    Comm_Write16(len);
+    Comm_WriteBytes(b, len);
+}
+
 static void Comm_WriteString(const char *s)
 {
     assert(comm_writing_msg);
@@ -300,8 +309,7 @@ static void Comm_WriteString(const char *s)
         I_Quit();
     }
 
-    Comm_Write16(len);
-    Comm_WriteBytes((byte *)s, len);
+    Comm_WriteBytesWithLen((byte *)s, len);
 }
 
 static void UnlinkFrameShm(void);
@@ -827,6 +835,20 @@ void DG_DrawFrame(void)
 
     COMM_WRITE_MSG(Comm_Write8(AMSG_FRAME_SHM_READY));
     screenvisible = false;
+}
+
+void DG_DrawHUTextLine(const hu_textline_t *l, boolean drawcursor)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FRAME_HU_TEXT_LINE);
+        assert(l->x >= INT16_MIN && l->x <= INT16_MAX);
+        Comm_Write16(l->x);
+        assert(l->y >= INT16_MIN && l->y <= INT16_MAX);
+        Comm_Write16(l->y);
+        assert(l->len >= 0 && l->len <= UINT16_MAX);
+        Comm_WriteBytesWithLen((byte *)l->l, l->len);
+        Comm_Write8(drawcursor);
+    });
 }
 
 boolean DG_GetInput(input_t *input)

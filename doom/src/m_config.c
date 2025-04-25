@@ -655,6 +655,15 @@ static default_t doom_defaults_list[] = {
     //
 
     CONFIG_VARIABLE_INT(comport),
+
+    //!
+    // (actually-doom)
+    //
+    // Don't render many UI elements to the frame buffer.
+    // Instead, let the doomgeneric implementation render them.
+    //
+
+    CONFIG_VARIABLE_INT(detached_ui),
 };
 
 static default_collection_t doom_defaults = {

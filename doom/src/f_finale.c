@@ -220,8 +220,6 @@ void F_TextWrite(void)
         }
     }
 
-    V_MarkRect(0, 0, SCREENWIDTH, SCREENHEIGHT);
-
     // draw some of the text onto the screen
     cx = 10;
     cy = 10;
@@ -585,8 +583,6 @@ void F_BunnyScroll(void)
 
     p1 = W_CacheLumpName("PFUB2", PU_LEVEL);
     p2 = W_CacheLumpName("PFUB1", PU_LEVEL);
-
-    V_MarkRect(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     scrolled = (320 - ((signed int)finalecount - 230) / 2);
     if (scrolled > 320)

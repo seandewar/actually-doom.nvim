@@ -369,6 +369,9 @@ void M_DrawLoad(void)
 {
     int i;
 
+    if (detached_ui)
+        return;
+
     V_DrawPatchDirect(72, 28, W_CacheLumpName("M_LOADG", PU_CACHE));
 
     for (i = 0; i < load_end; i++) {
@@ -429,6 +432,9 @@ void M_LoadGame(int choice)
 void M_DrawSave(void)
 {
     int i;
+
+    if (detached_ui)
+        return;
 
     V_DrawPatchDirect(72, 28, W_CacheLumpName("M_SAVEG", PU_CACHE));
     for (i = 0; i < load_end; i++) {
@@ -637,7 +643,8 @@ void M_DrawReadThis2(void)
 //
 void M_DrawSound(void)
 {
-    V_DrawPatchDirect(60, 38, W_CacheLumpName("M_SVOL", PU_CACHE));
+    if (!detached_ui)
+        V_DrawPatchDirect(60, 38, W_CacheLumpName("M_SVOL", PU_CACHE));
 
     M_DrawThermo(SoundDef.x, SoundDef.y + LINEHEIGHT * (sfx_vol + 1), 16,
                  sfxVolume);
@@ -698,8 +705,10 @@ void M_DrawMainMenu(void)
 //
 void M_DrawNewGame(void)
 {
-    V_DrawPatchDirect(96, 14, W_CacheLumpName("M_NEWG", PU_CACHE));
-    V_DrawPatchDirect(54, 38, W_CacheLumpName("M_SKILL", PU_CACHE));
+    if (!detached_ui) {
+        V_DrawPatchDirect(96, 14, W_CacheLumpName("M_NEWG", PU_CACHE));
+        V_DrawPatchDirect(54, 38, W_CacheLumpName("M_SKILL", PU_CACHE));
+    }
 }
 
 void M_NewGame(int choice)
@@ -726,7 +735,8 @@ int epi;
 
 void M_DrawEpisode(void)
 {
-    V_DrawPatchDirect(54, 38, W_CacheLumpName("M_EPISOD", PU_CACHE));
+    if (!detached_ui)
+        V_DrawPatchDirect(54, 38, W_CacheLumpName("M_EPISOD", PU_CACHE));
 }
 
 void M_VerifyNightmare(int key)
@@ -775,13 +785,17 @@ static char *msgNames[2] = {"M_MSGOFF", "M_MSGON"};
 
 void M_DrawOptions(void)
 {
-    V_DrawPatchDirect(108, 15, W_CacheLumpName("M_OPTTTL", PU_CACHE));
+    if (!detached_ui) {
+        V_DrawPatchDirect(108, 15, W_CacheLumpName("M_OPTTTL", PU_CACHE));
 
-    V_DrawPatchDirect(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * detail,
-                      W_CacheLumpName(detailNames[detailLevel], PU_CACHE));
+        V_DrawPatchDirect(OptionsDef.x + 175,
+                          OptionsDef.y + LINEHEIGHT * detail,
+                          W_CacheLumpName(detailNames[detailLevel], PU_CACHE));
 
-    V_DrawPatchDirect(OptionsDef.x + 120, OptionsDef.y + LINEHEIGHT * messages,
-                      W_CacheLumpName(msgNames[showMessages], PU_CACHE));
+        V_DrawPatchDirect(OptionsDef.x + 120,
+                          OptionsDef.y + LINEHEIGHT * messages,
+                          W_CacheLumpName(msgNames[showMessages], PU_CACHE));
+    }
 
     M_DrawThermo(OptionsDef.x, OptionsDef.y + LINEHEIGHT * (mousesens + 1), 10,
                  mouseSensitivity);
@@ -1585,6 +1599,9 @@ void M_Drawer(void)
 
     // Horiz. & Vertically center string and print it.
     if (messageToPrint) {
+        if (detached_ui)
+            return;
+
         start = 0;
         y = SCREENHEIGHT / 2 - M_StringHeight(messageString) / 2;
         while (messageString[start] != '\0') {
@@ -1616,8 +1633,7 @@ void M_Drawer(void)
         return;
     }
 
-    // if (opldev)
-    //{
+    // if (opldev) {
     //     M_DrawOPLDev();
     // }
 
@@ -1626,6 +1642,9 @@ void M_Drawer(void)
 
     if (currentMenu->routine)
         currentMenu->routine(); // call Draw routine
+
+    if (detached_ui)
+        return;
 
     // DRAW MENU
     x = currentMenu->x;

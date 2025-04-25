@@ -58,6 +58,7 @@ end)()
 --- @field sock uv.uv_pipe_t
 --- @field send_buf string.buffer
 --- @field check_timer uv.uv_timer_t
+--- @field check_scheduled boolean?
 --- @field pressed_key PressedKey?
 --- @field mouse_button_mask integer
 --- @field screen Screen?
@@ -97,6 +98,7 @@ end
 --- @param ms integer? If nil, schedule for the next event loop iteration.
 function Doom:schedule_check(ms)
   local function check_cb()
+    self.check_scheduled = false
     local next_sched_time = math.huge
     local now = uv.now()
 
@@ -117,9 +119,12 @@ function Doom:schedule_check(ms)
   end
 
   ms = ms and math.max(0, ms) or 0
-  local due_in = self.check_timer:get_due_in()
-  if due_in == 0 or due_in > ms then
+  -- check_scheduled exists to differentiate between an expired check_timer and
+  -- one that's expiring on the next event loop tick, which both return a due
+  -- time of 0.
+  if not self.check_scheduled or self.check_timer:get_due_in() > ms then
     assert(self.check_timer:start(ms, 0, self:close_on_err_wrap(check_cb)))
+    self.check_scheduled = true
   end
 end
 
@@ -428,27 +433,31 @@ local function recv_msg_loop(doom, buf)
   end
 
   --- @return integer
-  local function read8()
+  local function read_u8()
     return read_bytes(1):byte()
   end
   --- @return integer
-  local function read16()
+  local function read_u16()
     local a, b = read_bytes(2):byte(1, 2)
     return bit.bor(a, bit.lshift(b, 8))
   end
   --- @return integer
-  local function read32()
+  local function read_i16()
+    return bit.arshift(bit.lshift(read_u16(), 16), 16) -- Sign extendo!
+  end
+  --- @return integer
+  local function read_u32()
     local a, b, c, d = read_bytes(4):byte(1, 4)
     return bit.bor(a, bit.lshift(b, 8), bit.lshift(c, 16), bit.lshift(d, 24))
   end
   --- @return string
   local function read_string()
-    return read_bytes(read16())
+    return read_bytes(read_u16())
   end
 
-  local proto_version = read32()
-  local resx = read16()
-  local resy = read16()
+  local proto_version = read_u32()
+  local resx = read_u16()
+  local resy = read_u16()
   doom.console:plugin_print(
     ("AMSG_INIT: proto_version=%d resx=%d resy=%d\n"):format(
       proto_version,
@@ -500,6 +509,22 @@ local function recv_msg_loop(doom, buf)
       end
     end,
 
+    -- AMSG_FRAME_HU_TEXT_LINE
+    [4] = function()
+      local x = read_i16()
+      local y = read_i16()
+      local line = read_string()
+      local drawcursor = read_u8() ~= 0
+
+      doom.console:plugin_print(
+        (
+          "AMSG_FRAME_HU_TEXT_LINE: "
+          .. 'x=%d, y=%d, line="%s", drawcursor=%s\n'
+        ):format(x, y, line, tostring(drawcursor)),
+        "Debug"
+      )
+    end,
+
     -- AMSG_FRAME_SHM_READY
     [3] = function()
       if doom.screen.gfx.type == "kitty" then
@@ -531,7 +556,7 @@ local function recv_msg_loop(doom, buf)
   }
 
   while true do
-    local msg_type = read8()
+    local msg_type = read_u8()
     local handler = msg_handlers[msg_type]
     if handler then
       if handler() then

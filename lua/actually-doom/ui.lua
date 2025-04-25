@@ -615,8 +615,8 @@ function Screen:update_term_size()
   -- position (DSR).
   api.nvim_chan_send(self.term_chan, "\27[99999;99999H\27[6n")
 
-  -- Sizes should be set immediately the on_input callback originally passed to
-  -- nvim_open_term.
+  -- Sizes should be set immediately from the on_input callback originally
+  -- passed to nvim_open_term.
   assert(self.term_width)
   assert(self.term_height)
 end

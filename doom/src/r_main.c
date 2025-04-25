@@ -33,6 +33,7 @@
 #include "r_sky.h"
 #include "r_state.h"
 #include "r_things.h"
+#include "st_stuff.h"
 
 // Fineangles in the SCREENWIDTH wide window.
 #define FIELDOFVIEW 2048
@@ -572,12 +573,12 @@ void R_ExecuteSetViewSize(void)
 
     setsizeneeded = false;
 
-    if (setblocks == 11) {
+    if (setblocks >= 11) {
         scaledviewwidth = SCREENWIDTH;
         viewheight = SCREENHEIGHT;
     } else {
         scaledviewwidth = setblocks * 32;
-        viewheight = (setblocks * 168 / 10) & ~7;
+        viewheight = (setblocks * (SCREENHEIGHT - ST_HEIGHT) / 10) & ~7;
     }
 
     detailshift = setdetail;

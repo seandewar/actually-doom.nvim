@@ -26,6 +26,7 @@
 #include "r_defs.h"
 #include "r_main.h"
 #include "r_state.h"
+#include "st_stuff.h"
 #include "w_wad.h"
 #include "z_zone.h"
 
@@ -35,9 +36,6 @@
 // ?
 #define MAXWIDTH 1120
 #define MAXHEIGHT 832
-
-// status bar height at bottom of screen
-#define SBARHEIGHT 32
 
 //
 // All drawing to the view buffer is accomplished in this file.
@@ -716,11 +714,13 @@ void R_InitBuffer(int width, int height)
     for (i = 0; i < width; i++)
         columnofs[i] = viewwindowx + i;
 
-    // Samw with base row offset.
-    if (width == SCREENWIDTH)
+    // Same with base row offset.
+    if (width == SCREENWIDTH) {
         viewwindowy = 0;
-    else
-        viewwindowy = (SCREENHEIGHT - SBARHEIGHT - height) >> 1;
+    } else {
+        viewwindowy =
+            (SCREENHEIGHT - (detached_ui ? 0 : ST_HEIGHT) - height) >> 1;
+    }
 
     // Preclaculate all row offsets.
     for (i = 0; i < height; i++)
@@ -742,17 +742,19 @@ void R_FillBackScreen(void)
     patch_t *patch;
 
     // DOOM border patch.
-    char *name1 = "FLOOR7_2";
+    const char *name1 = "FLOOR7_2";
 
     // DOOM II border patch.
-    char *name2 = "GRNROCK";
+    const char *name2 = "GRNROCK";
 
-    char *name;
+    const char *name;
 
-    // If we are running full screen, there is no need to do any of this,
-    // and the background buffer can be freed if it was previously in use.
+    // If we are running full screen with the status HUD (so, not detached_ui
+    // mode), there is no need to do any of this, and the background buffer can
+    // be freed if it was previously in use.
 
-    if (scaledviewwidth == SCREENWIDTH) {
+    if (scaledviewwidth == SCREENWIDTH
+        && (!detached_ui || viewheight == SCREENHEIGHT)) {
         if (background_buffer != NULL) {
             Z_Free(background_buffer);
             background_buffer = NULL;
@@ -764,8 +766,8 @@ void R_FillBackScreen(void)
     // Allocate the background buffer if necessary
 
     if (background_buffer == NULL) {
-        background_buffer = Z_Malloc(SCREENWIDTH * (SCREENHEIGHT - SBARHEIGHT),
-                                     PU_STATIC, NULL);
+        background_buffer =
+            Z_Malloc(SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);
     }
 
     if (gamemode == commercial)
@@ -776,7 +778,7 @@ void R_FillBackScreen(void)
     src = W_CacheLumpName(name, PU_CACHE);
     dest = background_buffer;
 
-    for (y = 0; y < SCREENHEIGHT - SBARHEIGHT; y++) {
+    for (y = 0; y < SCREENHEIGHT - (detached_ui ? 0 : ST_HEIGHT); y++) {
         for (x = 0; x < SCREENWIDTH / 64; x++) {
             memcpy(dest, src + ((y & 63) << 6), 64);
             dest += 64;
@@ -792,35 +794,42 @@ void R_FillBackScreen(void)
 
     V_UseBuffer(background_buffer);
 
-    patch = W_CacheLumpName("brdr_t", PU_CACHE);
-
-    for (x = 0; x < scaledviewwidth; x += 8)
-        V_DrawPatch(viewwindowx + x, viewwindowy - 8, patch);
     patch = W_CacheLumpName("brdr_b", PU_CACHE);
 
     for (x = 0; x < scaledviewwidth; x += 8)
         V_DrawPatch(viewwindowx + x, viewwindowy + viewheight, patch);
-    patch = W_CacheLumpName("brdr_l", PU_CACHE);
 
-    for (y = 0; y < viewheight; y += 8)
-        V_DrawPatch(viewwindowx - 8, viewwindowy + y, patch);
-    patch = W_CacheLumpName("brdr_r", PU_CACHE);
+    if (scaledviewwidth != SCREENWIDTH) {
+        patch = W_CacheLumpName("brdr_t", PU_CACHE);
 
-    for (y = 0; y < viewheight; y += 8)
-        V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy + y, patch);
+        for (x = 0; x < scaledviewwidth; x += 8)
+            V_DrawPatch(viewwindowx + x, viewwindowy - 8, patch);
 
-    // Draw beveled edge.
-    V_DrawPatch(viewwindowx - 8, viewwindowy - 8,
-                W_CacheLumpName("brdr_tl", PU_CACHE));
+        patch = W_CacheLumpName("brdr_l", PU_CACHE);
 
-    V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy - 8,
-                W_CacheLumpName("brdr_tr", PU_CACHE));
+        for (y = 0; y < viewheight; y += 8)
+            V_DrawPatch(viewwindowx - 8, viewwindowy + y, patch);
 
-    V_DrawPatch(viewwindowx - 8, viewwindowy + viewheight,
-                W_CacheLumpName("brdr_bl", PU_CACHE));
+        patch = W_CacheLumpName("brdr_r", PU_CACHE);
 
-    V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy + viewheight,
-                W_CacheLumpName("brdr_br", PU_CACHE));
+        for (y = 0; y < viewheight; y += 8)
+            V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy + y, patch);
+    }
+
+    if (scaledviewwidth != SCREENWIDTH) {
+        // Draw beveled edge.
+        V_DrawPatch(viewwindowx - 8, viewwindowy - 8,
+                    W_CacheLumpName("brdr_tl", PU_CACHE));
+
+        V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy - 8,
+                    W_CacheLumpName("brdr_tr", PU_CACHE));
+
+        V_DrawPatch(viewwindowx - 8, viewwindowy + viewheight,
+                    W_CacheLumpName("brdr_bl", PU_CACHE));
+
+        V_DrawPatch(viewwindowx + scaledviewwidth, viewwindowy + viewheight,
+                    W_CacheLumpName("brdr_br", PU_CACHE));
+    }
 
     V_RestoreBuffer();
 }
@@ -853,10 +862,17 @@ void R_DrawViewBorder(void)
     int ofs;
     int i;
 
-    if (scaledviewwidth == SCREENWIDTH)
-        return;
+    if (scaledviewwidth == SCREENWIDTH) {
+        if (!detached_ui || viewheight == SCREENHEIGHT)
+            return;
 
-    top = ((SCREENHEIGHT - SBARHEIGHT) - viewheight) / 2;
+        // copy to the bottom where the status bar would usually be
+        R_VideoErase(viewheight * SCREENWIDTH,
+                     (SCREENHEIGHT - viewheight) * SCREENWIDTH);
+        return;
+    }
+
+    top = ((SCREENHEIGHT - (detached_ui ? 0 : ST_HEIGHT)) - viewheight) / 2;
     side = (SCREENWIDTH - scaledviewwidth) / 2;
 
     // copy top and one line of left side
@@ -874,7 +890,4 @@ void R_DrawViewBorder(void)
         R_VideoErase(ofs, side);
         ofs += SCREENWIDTH;
     }
-
-    // ?
-    V_MarkRect(0, 0, SCREENWIDTH, SCREENHEIGHT - SBARHEIGHT);
 }

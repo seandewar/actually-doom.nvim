@@ -53,25 +53,9 @@ byte *xlatab = NULL;
 
 static byte *dest_screen = NULL;
 
-int dirtybox[4];
-
 // haleyjd 08/28/10: clipping callback function for patches.
 // This is needed for Chocolate Strife, which clips patches to the screen.
 static vpatchclipfunc_t patchclip_callback = NULL;
-
-//
-// V_MarkRect
-//
-void V_MarkRect(int x, int y, int width, int height)
-{
-    // If we are temporarily using an alternate screen, do not
-    // affect the update box.
-
-    if (dest_screen == I_VideoBuffer) {
-        M_AddToBox(dirtybox, x, y);
-        M_AddToBox(dirtybox, x + width - 1, y + height - 1);
-    }
-}
 
 //
 // V_CopyRect
@@ -90,8 +74,6 @@ void V_CopyRect(int srcx, int srcy, byte *source, int width, int height,
         I_Error("Bad V_CopyRect");
     }
 #endif
-
-    V_MarkRect(destx, desty, width, height);
 
     src = source + SCREENWIDTH * srcy + srcx;
     dest = dest_screen + SCREENWIDTH * desty + destx;
@@ -152,8 +134,6 @@ void V_DrawPatch(int x, int y, patch_t *patch)
     }
 #endif
 
-    V_MarkRect(x, y, SHORT(patch->width), SHORT(patch->height));
-
     col = 0;
     desttop = dest_screen + y * SCREENWIDTH + x;
 
@@ -208,8 +188,6 @@ void V_DrawPatchFlipped(int x, int y, patch_t *patch)
         I_Error("Bad V_DrawPatchFlipped");
     }
 #endif
-
-    V_MarkRect(x, y, SHORT(patch->width), SHORT(patch->height));
 
     col = 0;
     desttop = dest_screen + y * SCREENWIDTH + x;
@@ -462,8 +440,6 @@ void V_DrawBlock(int x, int y, int width, int height, byte *src)
         I_Error("Bad V_DrawBlock");
     }
 #endif
-
-    V_MarkRect(x, y, width, height);
 
     dest = dest_screen + y * SCREENWIDTH + x;
 

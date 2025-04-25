@@ -26,6 +26,7 @@
 #include "m_controls.h"
 #include "m_misc.h"
 #include "p_local.h"
+#include "r_main.h"
 #include "r_state.h"
 #include "st_stuff.h"
 #include "w_wad.h"
@@ -173,8 +174,6 @@ static int grid = 0;
 static int leveljuststarted = 1; // kluge until AM_LevelInit() is called
 
 boolean automapactive = false;
-static int finit_width = SCREENWIDTH;
-static int finit_height = SCREENHEIGHT - 32;
 
 // location of window on screen
 static int f_x;
@@ -241,6 +240,9 @@ static int followplayer = 1; // specifies whether to follow the player around
 cheatseq_t cheat_amap = CHEAT("iddt", 0);
 
 static boolean stopped = true;
+
+// The value of detached_ui when AM_sizeInit was last called.
+static int size_old_detached_ui;
 
 // Calculates the slope and slope according to the x-axis of a line
 // segment in map coordinates (with the upright y-axis n' all) so
@@ -318,8 +320,6 @@ void AM_addMark(void)
 void AM_findMinMaxBoundaries(void)
 {
     int i;
-    fixed_t a;
-    fixed_t b;
 
     min_x = min_y = INT_MAX;
     max_x = max_y = -INT_MAX;
@@ -341,12 +341,6 @@ void AM_findMinMaxBoundaries(void)
 
     min_w = 2 * PLAYERRADIUS; // const? never changed?
     min_h = 2 * PLAYERRADIUS;
-
-    a = FixedDiv(f_w << FRACBITS, max_w);
-    b = FixedDiv(f_h << FRACBITS, max_h);
-
-    min_scale_mtof = a < b ? a : b;
-    max_scale_mtof = FixedDiv(f_h << FRACBITS, 2 * PLAYERRADIUS);
 }
 
 void AM_changeWindowLoc(void)
@@ -373,6 +367,28 @@ void AM_changeWindowLoc(void)
     m_y2 = m_y + m_h;
 }
 
+// AM_findMinMaxBoundaries should have been called before.
+static void AM_sizeInit(void)
+{
+    f_x = f_y = 0;
+    f_w = SCREENWIDTH;
+    // Only full-height for detached UI, as fullscreen shows the status bar.
+    f_h = SCREENHEIGHT - (detached_ui ? 0 : ST_HEIGHT);
+
+    fixed_t a = FixedDiv(f_w << FRACBITS, max_w);
+    fixed_t b = FixedDiv(f_h << FRACBITS, max_h);
+
+    min_scale_mtof = a < b ? a : b;
+    max_scale_mtof = FixedDiv(f_h << FRACBITS, 2 * PLAYERRADIUS);
+
+    scale_mtof = FixedDiv(min_scale_mtof, (int)(0.7 * FRACUNIT));
+    if (scale_mtof > max_scale_mtof)
+        scale_mtof = min_scale_mtof;
+    scale_ftom = FixedDiv(FRACUNIT, scale_mtof);
+
+    size_old_detached_ui = detached_ui;
+}
+
 void AM_initVariables(void)
 {
     int pnum;
@@ -380,6 +396,8 @@ void AM_initVariables(void)
 
     automapactive = true;
     fb = I_VideoBuffer;
+
+    AM_sizeInit();
 
     f_oldloc.x = INT_MAX;
     amclock = 0;
@@ -459,17 +477,8 @@ void AM_LevelInit(void)
 {
     leveljuststarted = 0;
 
-    f_x = f_y = 0;
-    f_w = finit_width;
-    f_h = finit_height;
-
     AM_clearMarks();
-
     AM_findMinMaxBoundaries();
-    scale_mtof = FixedDiv(min_scale_mtof, (int)(0.7 * FRACUNIT));
-    if (scale_mtof > max_scale_mtof)
-        scale_mtof = min_scale_mtof;
-    scale_ftom = FixedDiv(FRACUNIT, scale_mtof);
 }
 
 void AM_Stop(void)
@@ -694,6 +703,12 @@ void AM_Ticker(void)
 {
     if (!automapactive)
         return;
+
+    if (detached_ui != size_old_detached_ui) {
+        AM_sizeInit();
+        AM_changeWindowScale();
+        AM_changeWindowLoc();
+    }
 
     amclock++;
 
@@ -1154,6 +1169,4 @@ void AM_Drawer(void)
     AM_drawCrosshair(XHAIRCOLORS);
 
     AM_drawMarks();
-
-    V_MarkRect(f_x, f_y, f_w, f_h);
 }

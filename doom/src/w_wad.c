@@ -229,7 +229,7 @@ int W_NumLumps(void)
 // Returns -1 if name not found.
 //
 
-int W_CheckNumForName(char *name)
+int W_CheckNumForName(const char *name)
 {
     lumpinfo_t *lump_p;
     int i;
@@ -269,7 +269,7 @@ int W_CheckNumForName(char *name)
 // W_GetNumForName
 // Calls W_CheckNumForName, but bombs out if not found.
 //
-int W_GetNumForName(char *name)
+int W_GetNumForName(const char *name)
 {
     int i;
 
@@ -373,7 +373,7 @@ void *W_CacheLumpNum(int lumpnum, int tag)
 //
 // W_CacheLumpName
 //
-void *W_CacheLumpName(char *name, int tag)
+void *W_CacheLumpName(const char *name, int tag)
 {
     return W_CacheLumpNum(W_GetNumForName(name), tag);
 }
@@ -405,7 +405,7 @@ void W_ReleaseLumpNum(int lumpnum)
     }
 }
 
-void W_ReleaseLumpName(char *name)
+void W_ReleaseLumpName(const char *name)
 {
     W_ReleaseLumpNum(W_GetNumForName(name));
 }

@@ -43,7 +43,7 @@ typedef struct {
     char l[HU_MAXLINELENGTH + 1]; // line of text
     int len;                      // current line length
 
-    // whether this line needs to be udpated
+    // whether this line needs to be updated
     int needsupdate;
 
 } hu_textline_t;

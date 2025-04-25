@@ -113,6 +113,7 @@ char wadfile[1024]; // primary wad file
 char mapdir[1024];  // directory of development maps
 
 int show_endoom = 1;
+int detached_ui;
 
 void D_ConnectNetGame(void);
 void D_CheckNetGame(void);
@@ -154,25 +155,29 @@ void D_Display(void)
     static boolean inhelpscreensstate = false;
     static boolean fullscreen = false;
     static gamestate_t oldgamestate = -1;
-    static int borderdrawcount;
+    static int old_detached_ui;
     int nowtime;
     int tics;
     int wipestart;
     int y;
     boolean done;
     boolean wipe;
-    boolean redrawsbar;
+    boolean redrawsbar = false;
+    boolean redrawborder = false;
 
     if (nodrawers)
         return; // for comparative timing / profiling
 
-    redrawsbar = false;
+    if (detached_ui != old_detached_ui) {
+        redrawsbar = true;    // force status bar redraw
+        setsizeneeded = true; // refresh view size, force background redraw
+    }
 
-    // change the view size if needed
+    // change or refresh the view size if needed
     if (setsizeneeded) {
         R_ExecuteSetViewSize();
         oldgamestate = -1; // force background redraw
-        borderdrawcount = 3;
+        redrawborder = true;
     }
 
     // save the current screen if about to wipe
@@ -192,12 +197,12 @@ void D_Display(void)
             break;
         if (automapactive)
             AM_Drawer();
-        if (wipe || (viewheight != 200 && fullscreen))
+        if (wipe || (viewheight != SCREENHEIGHT && fullscreen))
             redrawsbar = true;
         if (inhelpscreensstate && !inhelpscreens)
             redrawsbar = true; // just put away the help screen
-        ST_Drawer(viewheight == 200, redrawsbar);
-        fullscreen = viewheight == 200;
+        ST_Drawer(viewheight == SCREENHEIGHT, redrawsbar);
+        fullscreen = viewheight == SCREENHEIGHT;
         break;
 
     case GS_INTERMISSION:
@@ -234,13 +239,11 @@ void D_Display(void)
     }
 
     // see if the border needs to be updated to the screen
-    if (gamestate == GS_LEVEL && !automapactive && scaledviewwidth != 320) {
+    if (gamestate == GS_LEVEL && !automapactive) {
         if (menuactive || menuactivestate || !viewactivestate)
-            borderdrawcount = 3;
-        if (borderdrawcount) {
+            redrawborder = true;
+        if (redrawborder)
             R_DrawViewBorder(); // erase old menu stuff
-            borderdrawcount--;
-        }
     }
 
     if (testcontrols) {
@@ -249,13 +252,8 @@ void D_Display(void)
         V_DrawMouseSpeedBox(testcontrols_mousespeed);
     }
 
-    menuactivestate = menuactive;
-    viewactivestate = viewactive;
-    inhelpscreensstate = inhelpscreens;
-    oldgamestate = wipegamestate = gamestate;
-
     // draw pause pic
-    if (paused) {
+    if (paused && !detached_ui) {
         if (automapactive)
             y = 4;
         else
@@ -263,6 +261,12 @@ void D_Display(void)
         V_DrawPatchDirect(viewwindowx + (scaledviewwidth - 68) / 2, y,
                           W_CacheLumpName("M_PAUSE", PU_CACHE));
     }
+
+    menuactivestate = menuactive;
+    viewactivestate = viewactive;
+    inhelpscreensstate = inhelpscreens;
+    oldgamestate = wipegamestate = gamestate;
+    old_detached_ui = detached_ui;
 
     // menus go directly to the screen
     M_Drawer();  // menu is drawn even on top of everything
@@ -337,6 +341,7 @@ void D_BindVariables(void)
     M_BindVariable("vanilla_savegame_limit", &vanilla_savegame_limit);
     M_BindVariable("vanilla_demo_limit", &vanilla_demo_limit);
     M_BindVariable("show_endoom", &show_endoom);
+    M_BindVariable("detached_ui", &detached_ui);
 
     // Multiplayer chat macros
 

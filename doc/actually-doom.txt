@@ -28,7 +28,7 @@ COMMANDS					*actually-doom-commands*
 GAME CONTROLS				*actually-doom-game-controls*
 
 Controls are similar to vanilla DOOM's, which can be viewed via the in-game
-help menu.  The most important are:
+help menu (press <F1>).  The most important are:
 
 						*actually-doom_<Esc>*
 <Esc>			Toggle the menu.
