@@ -629,13 +629,13 @@ function Screen:update_title()
     return
   end
 
+  local title = self.title or "DOOM"
+  if api.nvim_buf_is_valid(self.buf) then
+    api.nvim_buf_set_var(self.buf, "term_title", title)
+  end
   if api.nvim_win_is_valid(self.win) then
     api.nvim_win_set_config(self.win, {
-      title = {
-        { " " },
-        { self.title or "DOOM" },
-        { " " },
-      },
+      title = { { " " }, { title }, { " " } },
       title_pos = "center",
     })
   end
