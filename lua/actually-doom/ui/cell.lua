@@ -16,6 +16,7 @@ end
 --- @class (exact) CellGfx: Gfx
 --- @field screen Screen
 --- @field pending_pixels string?
+--- @field clear_hl_tables_ticker integer
 ---
 --- @field new function
 --- @field pixel_index function
@@ -29,6 +30,7 @@ local M = {
 function M.new(screen)
   return setmetatable({
     screen = screen,
+    clear_hl_tables_ticker = 0,
   }, { __index = M })
 end
 
@@ -189,7 +191,12 @@ function M:refresh(pixels)
   -- the attribute tables. We can work around this by forcing a rebuild of the
   -- tables before we send the frame, but this requires LuaJIT.
   if true_colour and ffi then
-    ffi.C.clear_hl_tables(true)
+    self.clear_hl_tables_ticker = self.clear_hl_tables_ticker + 1
+    -- Has some performance overhead, and is only needed occasionally.
+    if self.clear_hl_tables_ticker >= 30 then
+      ffi.C.clear_hl_tables(true)
+      self.clear_hl_tables_ticker = 0
+    end
   end
   api.nvim_chan_send(self.screen.term_chan, scratch_buf:get())
 end
