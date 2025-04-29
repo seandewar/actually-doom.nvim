@@ -24,6 +24,7 @@
 #include "d_englsh.h"
 #include "d_items.h"
 #include "doomdef.h"
+#include "doomgeneric.h"
 #include "doomkeys.h"
 #include "doomstat.h"
 #include "g_game.h"
@@ -940,6 +941,9 @@ void ST_Drawer(boolean fullscreen, boolean refresh)
     // Otherwise, update as little as possible
     else
         ST_diffDraw();
+
+    if (detached_ui)
+        DG_DrawPlayerStatus(plyr);
 }
 
 typedef void (*load_callback_t)(char *lumpname, patch_t **variable);

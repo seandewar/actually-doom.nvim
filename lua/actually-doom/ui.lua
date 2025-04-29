@@ -458,8 +458,8 @@ end
 --- @class (exact) Screen
 --- @field doom Doom
 --- @field title string?
---- @field resx integer
---- @field resy integer
+--- @field res_x integer
+--- @field res_y integer
 --- @field visible boolean?
 --- @field tmux_passthrough boolean?
 --- @field gfx Gfx
@@ -475,15 +475,15 @@ end
 local Screen = {}
 
 --- @param doom Doom
---- @param resx integer
---- @param resy integer
+--- @param res_x integer
+--- @param res_y integer
 --- @return Screen
 --- @nodiscard
-function Screen.new(doom, resx, resy)
+function Screen.new(doom, res_x, res_y)
   local screen = setmetatable({
     doom = doom,
-    resx = resx,
-    resy = resy,
+    res_x = res_x,
+    res_y = res_y,
   }, { __index = Screen })
 
   if os.getenv "TMUX" then

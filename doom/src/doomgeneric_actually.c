@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "d_items.h"
 #include "doomgeneric.h"
 #include "i_system.h"
 #include "i_video.h"
@@ -38,11 +39,16 @@
 // Integer values are sent as little-endian (network byte order considered
 // cringe).
 enum {
-    // AMSG_FRAME, pixels: u24[resx * resy] (R8G8B8)
+    // AMSG_FRAME, pixels: u24[res_x * res_y] (R8G8B8)
     AMSG_FRAME = 0,
 
-    // AMSG_FRAME_HU_TEXT_LINE, x: i16, y: i16, line: string, drawcursor: u8
+    // AMSG_FRAME_HU_TEXT_LINE, x: i16, y: i16, drawcursor: u8, line: string
     AMSG_FRAME_HU_TEXT_LINE = 4,
+
+    // AMSG_FRAME_PLAYER_STATUS, health: i16, armor: i16, ready_ammo: i16,
+    //      ammo: i16[NUMAMMO], max_ammo: i16[NUMAMMO], arms_bits: u8,
+    //      keys_bits: u8
+    AMSG_FRAME_PLAYER_STATUS = 5,
 
     // AMSG_FRAME_SHM_READY (no payload)
     AMSG_FRAME_SHM_READY = 3,
@@ -771,7 +777,7 @@ void DG_Init(void)
     CloseListenSocket();
     clock_start_ms = GetClockMs();
 
-    // "AMSG_INIT": proto_version: u32, resx: u16, resy: u16
+    // "AMSG_INIT": proto_version: u32, res_x: u16, res_y: u16
     COMM_WRITE_MSG({
         Comm_Write32(AMSG_PROTO_VERSION);
         Comm_Write16(SCREENWIDTH);
@@ -839,15 +845,55 @@ void DG_DrawFrame(void)
 
 void DG_DrawHUTextLine(const hu_textline_t *l, boolean drawcursor)
 {
+    if (l->len <= 0 && !drawcursor)
+        return;
+
     COMM_WRITE_MSG({
         Comm_Write8(AMSG_FRAME_HU_TEXT_LINE);
-        assert(l->x >= INT16_MIN && l->x <= INT16_MAX);
+        assert((int16_t)l->x == l->x);
         Comm_Write16(l->x);
-        assert(l->y >= INT16_MIN && l->y <= INT16_MAX);
+        assert((int16_t)l->y == l->y);
         Comm_Write16(l->y);
-        assert(l->len >= 0 && l->len <= UINT16_MAX);
-        Comm_WriteBytesWithLen((byte *)l->l, l->len);
         Comm_Write8(drawcursor);
+        assert(l->len <= UINT16_MAX);
+        Comm_WriteBytesWithLen((byte *)l->l, l->len);
+    });
+}
+
+void DG_DrawPlayerStatus(const player_t *p)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FRAME_PLAYER_STATUS);
+        assert((int16_t)p->health == p->health);
+        Comm_Write16(p->health);
+        assert((int16_t)p->armorpoints == p->armorpoints);
+        Comm_Write16(p->armorpoints);
+
+        ammotype_t ready_ammo_type = weaponinfo[p->readyweapon].ammo;
+        int ready_ammo =
+            ready_ammo_type == am_noammo ? -1 : p->ammo[ready_ammo_type];
+        assert((int16_t)ready_ammo == ready_ammo);
+        Comm_Write16(ready_ammo);
+
+        for (int i = 0; i < NUMAMMO; ++i) {
+            assert((int16_t)p->ammo[i] == p->ammo[i]);
+            Comm_Write16(p->ammo[i]);
+        }
+        for (int i = 0; i < NUMAMMO; ++i) {
+            assert((int16_t)p->maxammo[i] == p->maxammo[i]);
+            Comm_Write16(p->maxammo[i]);
+        }
+
+        byte arms_bits = 0;
+        for (int i = 0; i < 6; ++i) // Slots numbered 2-7.
+            arms_bits |= !!p->weaponowned[i + 1] << i;
+        Comm_Write8(arms_bits);
+
+        byte key_bits = 0;
+        key_bits |= p->cards[it_bluecard] || p->cards[it_blueskull];
+        key_bits |= (p->cards[it_yellowcard] || p->cards[it_yellowskull]) << 1;
+        key_bits |= (p->cards[it_redcard] || p->cards[it_redskull]) << 2;
+        Comm_Write8(key_bits);
     });
 }
 

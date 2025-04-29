@@ -454,15 +454,18 @@ local function recv_msg_loop(doom, buf)
   local function read_string()
     return read_bytes(read_u16())
   end
+  local function skip_string()
+    return skip_bytes(read_u16())
+  end
 
   local proto_version = read_u32()
-  local resx = read_u16()
-  local resy = read_u16()
+  local res_x = read_u16()
+  local res_y = read_u16()
   doom.console:plugin_print(
-    ("AMSG_INIT: proto_version=%d resx=%d resy=%d\n"):format(
+    ("AMSG_INIT: proto_version=%d res_x=%d res_y=%d\n"):format(
       proto_version,
-      resx,
-      resy
+      res_x,
+      res_y
     ),
     "Debug"
   )
@@ -479,7 +482,7 @@ local function recv_msg_loop(doom, buf)
     return
   end
 
-  doom.screen = require("actually-doom.ui").Screen.new(doom, resx, resy)
+  doom.screen = require("actually-doom.ui").Screen.new(doom, res_x, res_y)
   -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only available
   -- as a modifier for other keys), so use X.
   doom:send_set_config_var("key_fire", "45") -- DOS scancode for x.
@@ -494,11 +497,13 @@ local function recv_msg_loop(doom, buf)
     [0] = function()
       local len = require("actually-doom.ui.cell").pixel_index(
         0,
-        doom.screen.resy,
-        doom.screen.resx
+        doom.screen.res_y,
+        doom.screen.res_x
       )
       if doom.screen.gfx.type == "cell" then
-        doom.screen.gfx:refresh(read_bytes(len))
+        local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
+        cell_gfx.frame_pixels = read_bytes(len)
+        cell_gfx:refresh()
       else
         skip_bytes(len)
       end
@@ -513,16 +518,66 @@ local function recv_msg_loop(doom, buf)
     [4] = function()
       local x = read_i16()
       local y = read_i16()
-      local line = read_string()
-      local drawcursor = read_u8() ~= 0
+      local draw_cursor = read_u8() ~= 0
 
-      doom.console:plugin_print(
-        (
-          "AMSG_FRAME_HU_TEXT_LINE: "
-          .. 'x=%d, y=%d, line="%s", drawcursor=%s\n'
-        ):format(x, y, line, tostring(drawcursor)),
-        "Debug"
-      )
+      if doom.screen.gfx.type == "cell" then
+        local line = read_string()
+        local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
+        cell_gfx.frame_text_lines[#cell_gfx.frame_text_lines + 1] = {
+          pix_x = x,
+          pix_y = y,
+          draw_cursor = draw_cursor,
+          line = line,
+        }
+      else
+        skip_string()
+      end
+    end,
+
+    -- AMSG_FRAME_PLAYER_STATUS
+    [5] = function()
+      local health = read_i16()
+      local armour = read_i16()
+      local ready_ammo = read_i16()
+      local bullets = read_i16()
+      local shells = read_i16()
+      local rockets = read_i16()
+      local cells = read_i16()
+      local max_bullets = read_i16()
+      local max_shells = read_i16()
+      local max_rockets = read_i16()
+      local max_cells = read_i16()
+      local arms_bits = read_u8()
+      local key_bits = read_u8()
+
+      if doom.screen.gfx.type == "cell" then
+        local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
+        cell_gfx.frame_player_status = {
+          health = health,
+          armour = armour,
+          ready_ammo = ready_ammo >= 0 and ready_ammo or nil,
+          bullets = bullets,
+          shells = shells,
+          rockets = rockets,
+          cells = cells,
+          max_bullets = max_bullets,
+          max_shells = max_shells,
+          max_rockets = max_rockets,
+          max_cells = max_cells,
+          arms = {
+            [0] = true, -- Slot 1 (index 0) always occupied.
+            [1] = bit.band(arms_bits, 1) ~= 0,
+            [2] = bit.band(arms_bits, 2) ~= 0,
+            [3] = bit.band(arms_bits, 4) ~= 0,
+            [4] = bit.band(arms_bits, 8) ~= 0,
+            [5] = bit.band(arms_bits, 16) ~= 0,
+            [6] = bit.band(arms_bits, 32) ~= 0,
+          },
+          has_blue_key = bit.band(key_bits, 1) ~= 0,
+          has_yellow_key = bit.band(key_bits, 2) ~= 0,
+          has_red_key = bit.band(key_bits, 4) ~= 0,
+        }
+      end
     end,
 
     -- AMSG_FRAME_SHM_READY

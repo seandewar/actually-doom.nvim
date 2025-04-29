@@ -13,9 +13,34 @@ do
   end
 end
 
+--- @class (exact) PlayerStatus
+--- @field health integer
+--- @field armour integer
+--- @field ready_ammo integer?
+--- @field bullets integer
+--- @field shells integer
+--- @field rockets integer
+--- @field cells integer
+--- @field max_bullets integer
+--- @field max_shells integer
+--- @field max_rockets integer
+--- @field max_cells integer
+--- @field arms table<integer, boolean>
+--- @field has_blue_key boolean
+--- @field has_yellow_key boolean
+--- @field has_red_key boolean
+
+--- @class (exact) HuTextLine
+--- @field pix_x integer
+--- @field pix_y integer
+--- @field draw_cursor boolean
+--- @field line string
+
 --- @class (exact) CellGfx: Gfx
 --- @field screen Screen
---- @field pending_pixels string?
+--- @field frame_pixels string?
+--- @field frame_player_status PlayerStatus?
+--- @field frame_text_lines table<HuTextLine>
 --- @field clear_hl_tables_ticker integer
 ---
 --- @field new function
@@ -30,6 +55,7 @@ local M = {
 function M.new(screen)
   return setmetatable({
     screen = screen,
+    frame_text_lines = {},
     clear_hl_tables_ticker = 0,
   }, { __index = M })
 end
@@ -108,19 +134,17 @@ local function rgb_to_xterm256(r, g, b)
   return colour
 end
 
---- @param pixels string
-function M:refresh(pixels)
+local right_arms_keys_cols = #" Arms 234567 Keys XXX "
+local right_ammo_cols = #" Bull XXX / XXX "
+
+function M:refresh()
   if not self.screen.term_chan then
     return
   end
   if vim.in_fast_event() then
-    if not self.pending_pixels then
-      vim.schedule(function()
-        self:refresh(self.pending_pixels)
-        self.pending_pixels = nil
-      end)
-    end
-    self.pending_pixels = pixels
+    vim.schedule(function()
+      self:refresh()
+    end)
     return
   end
 
@@ -130,12 +154,12 @@ function M:refresh(pixels)
   --- @nodiscard
   local function pixel_topleft_pos(x, y)
     local pix_x = math.min(
-      math.floor((x / self.screen.term_width) * self.screen.resx),
-      self.screen.resx
+      math.floor((x / self.screen.term_width) * self.screen.res_x),
+      self.screen.res_x
     )
     local pix_y = math.min(
-      math.floor((y / self.screen.term_height) * self.screen.resy),
-      self.screen.resy
+      math.floor((y / self.screen.term_height) * self.screen.res_y),
+      self.screen.res_y
     )
     return pix_x, pix_y
   end
@@ -148,41 +172,183 @@ function M:refresh(pixels)
   -- Reset attributes, clear screen, clear scrollback, cursor to 0,0.
   scratch_buf:put "\27[m\27[2J\27[3J\27[H"
 
-  for y = 0, self.screen.term_height - 1 do -- 0-indexed
-    for x = 0, self.screen.term_width - 1 do -- 0-indexed
-      -- Pixel positions are 0-indexed.
-      local pix_x, pix_y = pixel_topleft_pos(x, y)
-      local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
-      pix_x2 = math.min(self.screen.resx - 1, pix_x2)
-      pix_y2 = math.min(self.screen.resy - 1, pix_y2)
-      local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
+  if self.frame_pixels then
+    for y = 0, self.screen.term_height - 1 do -- 0-indexed
+      for x = 0, self.screen.term_width - 1 do -- 0-indexed
+        -- Pixel positions are 0-indexed.
+        local pix_x, pix_y = pixel_topleft_pos(x, y)
+        local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
+        pix_x2 = math.min(self.screen.res_x - 1, pix_x2)
+        pix_y2 = math.min(self.screen.res_y - 1, pix_y2)
+        local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
 
-      -- Average the colours of all pixels within this cell.
-      local r, g, b = 0, 0, 0
-      for py = pix_y, pix_y2 do
-        for px = pix_x, pix_x2 do
-          local pi = M.pixel_index(px, py, self.screen.resx) + 1
-          local pr, pg, pb = pixels:byte(pi, pi + 3)
-          r = r + pr
-          g = g + pg
-          b = b + pb
+        -- Average the colours of all pixels within this cell.
+        local r, g, b = 0, 0, 0
+        for py = pix_y, pix_y2 do
+          for px = pix_x, pix_x2 do
+            local pi = M.pixel_index(px, py, self.screen.res_x) + 1
+            local pr, pg, pb = self.frame_pixels:byte(pi, pi + 3)
+            r = r + pr
+            g = g + pg
+            b = b + pb
+          end
+        end
+        r = math.min(255, math.floor(r / pix_count + 0.5))
+        g = math.min(255, math.floor(g / pix_count + 0.5))
+        b = math.min(255, math.floor(b / pix_count + 0.5))
+
+        if true_colour then
+          -- Set background RGB "true" colour and write a space.
+          scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
+        else
+          -- Same as above, but using a near xterm-256 colour instead.
+          scratch_buf:put("\27[48;5;", rgb_to_xterm256(r, g, b), "m ")
         end
       end
-      r = math.min(255, math.floor(r / pix_count + 0.5))
-      g = math.min(255, math.floor(g / pix_count + 0.5))
-      b = math.min(255, math.floor(b / pix_count + 0.5))
-
-      if true_colour then
-        -- Set background RGB "true" colour and write a space.
-        scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
-      else
-        -- Same as above, but using a near xterm-256 colour instead.
-        scratch_buf:put("\27[48;5;", rgb_to_xterm256(r, g, b), "m ")
+      if y + 1 < self.screen.term_height then
+        scratch_buf:put "\r\n"
       end
     end
-    if y + 1 < self.screen.term_height then
-      scratch_buf:put "\r\n"
+
+    self.frame_pixels = nil
+  end
+
+  if self.frame_player_status then
+    -- TODO: clip when outside of terminal bounds
+
+    -- Set background colour to xterm #3a3a3a, cursor to last line.
+    scratch_buf:put("\27[48;5;237m\27[", self.screen.term_height, "H")
+    -- Foreground colour to xterm pure white, write label, foreground colour
+    -- to xterm pure red, write health percentage.
+    scratch_buf:putf(
+      "\27[38;5;231m Health \27[38;5;196m%3d%% ",
+      self.frame_player_status.health
+    )
+    -- Foreground colour to xterm pure white, write label, foreground colour
+    -- to xterm pure red, write armour percentage.
+    scratch_buf:putf(
+      "\27[38;5;231mArmor \27[38;5;196m%3d%% ",
+      self.frame_player_status.armour
+    )
+
+    if self.frame_player_status.ready_ammo then
+      -- Foreground colour to xterm pure white, write label, foreground colour
+      -- to xterm pure red, write ammo count.
+      scratch_buf:putf(
+        "\27[38;5;231mAmmo \27[38;5;196m%3d ",
+        self.frame_player_status.ready_ammo
+      )
     end
+
+    local function write_ammo_type_count(row, label, ammo, max_ammo)
+      assert(row >= 0 and row < 4 and #label == 4)
+      scratch_buf:putf(
+        -- Cursor to right side, at least 4 lines (ammo type count) above last.
+        -- Foreground colour to xterm pure white, write label.
+        -- Foreground colour to xterm pure yellow, write counts.
+        "\27[%u;%uH\27[38;5;231m %s \27[38;5;226m%3d / %3d ",
+        math.max(0, self.screen.term_height - 4 + row),
+        self.screen.term_width - (right_ammo_cols - 1),
+        label,
+        ammo,
+        max_ammo
+      )
+    end
+    write_ammo_type_count(
+      0,
+      "Bull",
+      self.frame_player_status.bullets,
+      self.frame_player_status.max_bullets
+    )
+    write_ammo_type_count(
+      1,
+      "Shel",
+      self.frame_player_status.shells,
+      self.frame_player_status.max_shells
+    )
+    write_ammo_type_count(
+      2,
+      "Rckt",
+      self.frame_player_status.rockets,
+      self.frame_player_status.max_rockets
+    )
+    write_ammo_type_count(
+      3,
+      "Cell",
+      self.frame_player_status.cells,
+      self.frame_player_status.max_cells
+    )
+
+    scratch_buf:put(
+      -- Cursor to right side of last line.
+      "\27[",
+      self.screen.term_height,
+      ";",
+      self.screen.term_width - (right_arms_keys_cols - 1),
+      "H",
+      -- Foreground colour to xterm pure white, write label.
+      "\27[38;5;231m Arms "
+    )
+    for i = 1, #self.frame_player_status.arms do -- Slots numbered 2-7.
+      -- Foreground colour to xterm pure yellow or #121212, write slot number.
+      scratch_buf:put(
+        "\27[38;5;",
+        self.frame_player_status.arms[i] and 226 or 233,
+        "m",
+        i + 1
+      )
+    end
+
+    scratch_buf:put(
+      -- Foreground colour to xterm pure white, write label.
+      "\27[38;5;231m Keys ",
+      -- Foreground colour to xterm pure blue or #121212, write symbol.
+      "\27[38;5;",
+      self.frame_player_status.has_blue_key and 21 or 233,
+      "m●",
+      -- Foreground colour to xterm pure yellow or #121212, write symbol.
+      "\27[38;5;",
+      self.frame_player_status.has_yellow_key and 226 or 233,
+      "m●",
+      -- Foreground colour to xterm pure red or #121212, write symbol.
+      "\27[38;5;",
+      self.frame_player_status.has_red_key and 196 or 233,
+      "m● "
+    )
+
+    self.frame_player_status = nil
+  end
+
+  if #self.frame_text_lines > 0 then
+    -- Set background colour to xterm pure black, foreground colour to xterm
+    -- pure red.
+    scratch_buf:put "\27[48;5;16m\27[38;5;196m"
+
+    for _, text_line in ipairs(self.frame_text_lines) do
+      -- 0-indexed for both.
+      local row = math.floor(
+        (text_line.pix_y / self.screen.res_y) * self.screen.term_height
+      )
+      local col = math.floor(
+        (text_line.pix_x / self.screen.res_x) * self.screen.term_width
+      )
+      local max_cols = self.screen.term_width - col
+
+      -- Cursor to position, write text.
+      scratch_buf:put(
+        "\27[",
+        row + 1,
+        ";",
+        col + 1,
+        "H",
+        text_line.line:sub(1, max_cols)
+      )
+      if text_line.draw_cursor and #text_line.line < max_cols then
+        scratch_buf:put "_"
+      end
+    end
+
+    self.frame_text_lines = {}
   end
 
   -- When using RGB, it's possible for Nvim to run out of free highlight
@@ -203,11 +369,11 @@ end
 
 --- @param x integer (0-based)
 --- @param y integer (0-based)
---- @param resx integer
+--- @param res_x integer
 --- @return integer (0-based)
 --- @nodiscard
-function M.pixel_index(x, y, resx)
-  return (y * resx + x) * 3
+function M.pixel_index(x, y, res_x)
+  return (y * res_x + x) * 3
 end
 
 return M

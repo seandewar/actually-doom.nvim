@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "doomtype.h"
+#include "d_player.h"
 #include "hu_lib.h"
 #include "i_video.h"
 
@@ -33,6 +34,7 @@ void DG_Init(void);
 void DG_WipeTick(void);
 void DG_DrawFrame(void);
 void DG_DrawHUTextLine(const hu_textline_t *l, boolean drawcursor);
+void DG_DrawPlayerStatus(const player_t *player);
 void DG_SleepMs(uint32_t ms);
 uint32_t DG_GetTicksMs(void);
 boolean DG_GetInput(input_t *input);

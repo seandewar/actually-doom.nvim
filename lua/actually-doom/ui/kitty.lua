@@ -450,8 +450,8 @@ function M:refresh()
         self.screen.term_width,
         self.screen.term_height,
         self.image_id,
-        self.screen.resx,
-        self.screen.resy,
+        self.screen.res_x,
+        self.screen.res_y,
         self.shm_name_base64
       )
     )
