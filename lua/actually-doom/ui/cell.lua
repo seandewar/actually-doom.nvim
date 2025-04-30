@@ -143,7 +143,7 @@ local function rgb_to_xterm256(r, g, b)
   return colour
 end
 
-local right_arms_keys_cols = #" Arms 234567 Keys XXX "
+local right_arms_keys_cols = #" 234567     XXX "
 local right_ammo_cols = #" Bull XXX / XXX "
 
 function M:refresh()
@@ -232,28 +232,29 @@ function M:refresh()
   end
 
   if self.frame_player_status then
-    -- TODO: clip when outside of terminal bounds
-
-    -- Set background colour to xterm #3a3a3a, cursor to last line.
-    scratch_buf:put("\27[48;5;237m\27[", self.screen.term_height, "H")
+    -- Set background colour to xterm #3a3a3a.
+    scratch_buf:put "\27[48;5;237m"
+    -- Cursor to last line.
     -- Foreground colour to xterm pure white, write label, foreground colour
     -- to xterm pure red, write health percentage.
     scratch_buf:putf(
-      "\27[38;5;231m Health \27[38;5;196m%3d%% ",
+      "\27[%uH\27[38;5;231m Health \27[38;5;196m%3d%% ",
+      self.screen.term_height,
       self.frame_player_status.health
     )
-    -- Foreground colour to xterm pure white, write label, foreground colour
-    -- to xterm pure red, write armour percentage.
-    scratch_buf:putf(
-      "\27[38;5;231mArmor \27[38;5;196m%3d%% ",
-      self.frame_player_status.armour
-    )
-
-    if self.frame_player_status.ready_ammo then
-      -- Foreground colour to xterm pure white, write label, foreground colour
-      -- to xterm pure red, write ammo count.
+    if self.screen.term_height > 1 then
+      -- Same as above, but line up and writing armour percentage.
       scratch_buf:putf(
-        "\27[38;5;231mAmmo \27[38;5;196m%3d ",
+        "\27[%uH\27[38;5;231m Armor  \27[38;5;196m%3d%% ",
+        self.screen.term_height - 1,
+        self.frame_player_status.armour
+      )
+    end
+    if self.frame_player_status.ready_ammo and self.screen.term_height > 2 then
+      -- Same as above, but line up and writing ammo count for equipped weapon.
+      scratch_buf:putf(
+        "\27[%uH\27[38;5;231m Ammo    \27[38;5;196m%3d ",
+        self.screen.term_height - 2,
         self.frame_player_status.ready_ammo
       )
     end
@@ -297,15 +298,13 @@ function M:refresh()
       self.frame_player_status.max_cells
     )
 
+    -- Cursor to right side of last line.
     scratch_buf:put(
-      -- Cursor to right side of last line.
       "\27[",
       self.screen.term_height,
       ";",
       self.screen.term_width - (right_arms_keys_cols - 1),
-      "H",
-      -- Foreground colour to xterm pure white, write label.
-      "\27[38;5;231m Arms "
+      "H "
     )
     for i = 1, #self.frame_player_status.arms do -- Slots numbered 2-7.
       -- Foreground colour to xterm pure yellow or #121212, write slot number.
@@ -318,8 +317,7 @@ function M:refresh()
     end
 
     scratch_buf:put(
-      -- Foreground colour to xterm pure white, write label.
-      "\27[38;5;231m Keys ",
+      "     ",
       -- Foreground colour to xterm pure blue or #121212, write symbol.
       "\27[38;5;",
       self.frame_player_status.has_blue_key and 21 or 233,
@@ -350,18 +348,10 @@ function M:refresh()
       local col = math.floor(
         (text_line.pix_x / self.screen.res_x) * self.screen.term_width
       )
-      local max_cols = self.screen.term_width - col
 
       -- Cursor to position, write text.
-      scratch_buf:put(
-        "\27[",
-        row + 1,
-        ";",
-        col + 1,
-        "H",
-        text_line.line:sub(1, max_cols)
-      )
-      if text_line.draw_cursor and #text_line.line < max_cols then
+      scratch_buf:put("\27[", row + 1, ";", col + 1, "H", text_line.line)
+      if text_line.draw_cursor then
         scratch_buf:put "_"
       end
     end
