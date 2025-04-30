@@ -71,6 +71,15 @@ local cube_levels = { 0, 95, 135, 175, 215, 255 }
 -- rgb_to_xterm256 brings a performance uplift.
 local xterm_colour_cache = {}
 
+--- @param r integer
+--- @param g integer
+--- @param b integer
+--- @return integer
+--- @nodiscard
+local function rgb_key(r, g, b)
+  return bit.bor(r, bit.lshift(g, 8), bit.lshift(b, 16))
+end
+
 --- Convert RGB to the closest xterm-256 colour. Excludes the first 16 system
 --- colours. Not intended to be super accurate.
 --- @param r integer
@@ -79,7 +88,7 @@ local xterm_colour_cache = {}
 --- @return integer
 --- @nodiscard
 local function rgb_to_xterm256(r, g, b)
-  local cache_key = bit.bor(r, bit.lshift(g, 8), bit.lshift(b, 16))
+  local cache_key = rgb_key(r, g, b)
   if xterm_colour_cache[cache_key] then
     return xterm_colour_cache[cache_key]
   end
@@ -173,6 +182,8 @@ function M:refresh()
   scratch_buf:put "\27[m\27[2J\27[3J\27[H"
 
   if self.frame_pixels then
+    local prev_colour
+
     for y = 0, self.screen.term_height - 1 do -- 0-indexed
       for x = 0, self.screen.term_width - 1 do -- 0-indexed
         -- Pixel positions are 0-indexed.
@@ -196,14 +207,21 @@ function M:refresh()
         r = math.min(255, math.floor(r / pix_count + 0.5))
         g = math.min(255, math.floor(g / pix_count + 0.5))
         b = math.min(255, math.floor(b / pix_count + 0.5))
+        local colour = true_colour and rgb_key(r, g, b)
+          or rgb_to_xterm256(r, g, b)
 
-        if true_colour then
-          -- Set background RGB "true" colour and write a space.
-          scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m ")
-        else
-          -- Same as above, but using a near xterm-256 colour instead.
-          scratch_buf:put("\27[48;5;", rgb_to_xterm256(r, g, b), "m ")
+        -- Only emit an escape sequence if the colour changed.
+        if colour ~= prev_colour then
+          if true_colour then
+            -- Set background RGB "true" colour.
+            scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m")
+          else
+            -- Set background xterm-256 colour.
+            scratch_buf:put("\27[48;5;", colour, "m")
+          end
+          prev_colour = colour
         end
+        scratch_buf:put " "
       end
       if y + 1 < self.screen.term_height then
         scratch_buf:put "\r\n"
