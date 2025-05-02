@@ -13,34 +13,14 @@ do
   end
 end
 
---- @class (exact) PlayerStatus
---- @field health integer
---- @field armour integer
---- @field ready_ammo integer?
---- @field bullets integer
---- @field shells integer
---- @field rockets integer
---- @field cells integer
---- @field max_bullets integer
---- @field max_shells integer
---- @field max_rockets integer
---- @field max_cells integer
---- @field arms table<integer, boolean>
---- @field has_blue_key boolean
---- @field has_yellow_key boolean
---- @field has_red_key boolean
-
---- @class (exact) HuTextLine
---- @field pix_x integer
---- @field pix_y integer
---- @field draw_cursor boolean
---- @field line string
-
 --- @class (exact) CellGfx: Gfx
 --- @field screen Screen
 --- @field frame_pixels string?
---- @field frame_player_status PlayerStatus?
---- @field frame_text_lines table<HuTextLine>
+--- @field draw_game_msgs boolean?
+--- @field draw_menu_msgs boolean?
+--- @field draw_automap_title boolean?
+--- @field draw_status_bar boolean?
+--- @field draw_paused boolean?
 --- @field clear_hl_tables_ticker integer
 ---
 --- @field new function
@@ -183,7 +163,6 @@ function M:refresh()
 
   if self.frame_pixels then
     local prev_colour
-
     for y = 0, self.screen.term_height - 1 do -- 0-indexed
       for x = 0, self.screen.term_width - 1 do -- 0-indexed
         -- Pixel positions are 0-indexed.
@@ -227,11 +206,10 @@ function M:refresh()
         scratch_buf:put "\r\n"
       end
     end
-
-    self.frame_pixels = nil
   end
 
-  if self.frame_player_status then
+  local player_status = self.screen.doom.player_status
+  if self.draw_status_bar and player_status then
     -- Set background colour to xterm #3a3a3a.
     scratch_buf:put "\27[48;5;237m"
     -- Cursor to last line.
@@ -240,62 +218,64 @@ function M:refresh()
     scratch_buf:putf(
       "\27[%uH\27[38;5;231m Health \27[38;5;196m%3d%% ",
       self.screen.term_height,
-      self.frame_player_status.health
+      player_status.health
     )
     if self.screen.term_height > 1 then
       -- Same as above, but line up and writing armour percentage.
       scratch_buf:putf(
         "\27[%uH\27[38;5;231m Armor  \27[38;5;196m%3d%% ",
         self.screen.term_height - 1,
-        self.frame_player_status.armour
+        player_status.armour
       )
     end
-    if self.frame_player_status.ready_ammo and self.screen.term_height > 2 then
+    if player_status.ready_ammo and self.screen.term_height > 2 then
       -- Same as above, but line up and writing ammo count for equipped weapon.
       scratch_buf:putf(
         "\27[%uH\27[38;5;231m Ammo    \27[38;5;196m%3d ",
         self.screen.term_height - 2,
-        self.frame_player_status.ready_ammo
+        player_status.ready_ammo
       )
     end
 
     local function write_ammo_type_count(row, label, ammo, max_ammo)
       assert(row >= 0 and row < 4 and #label == 4)
-      scratch_buf:putf(
-        -- Cursor to right side, at least 4 lines (ammo type count) above last.
-        -- Foreground colour to xterm pure white, write label.
-        -- Foreground colour to xterm pure yellow, write counts.
-        "\27[%u;%uH\27[38;5;231m %s \27[38;5;226m%3d / %3d ",
-        math.max(0, self.screen.term_height - 4 + row),
-        self.screen.term_width - (right_ammo_cols - 1),
-        label,
-        ammo,
-        max_ammo
-      )
+      if self.screen.term_height - 4 + row > 0 then
+        scratch_buf:putf(
+          -- Cursor to right, at least 4 lines (ammo type count) above last.
+          -- Foreground colour to xterm pure white, write label.
+          -- Foreground colour to xterm pure yellow, write counts.
+          "\27[%u;%uH\27[38;5;231m %s \27[38;5;226m%3d / %3d ",
+          self.screen.term_height - 4 + row,
+          self.screen.term_width - (right_ammo_cols - 1),
+          label,
+          ammo,
+          max_ammo
+        )
+      end
     end
     write_ammo_type_count(
       0,
       "Bull",
-      self.frame_player_status.bullets,
-      self.frame_player_status.max_bullets
+      player_status.bullets,
+      player_status.max_bullets
     )
     write_ammo_type_count(
       1,
       "Shel",
-      self.frame_player_status.shells,
-      self.frame_player_status.max_shells
+      player_status.shells,
+      player_status.max_shells
     )
     write_ammo_type_count(
       2,
       "Rckt",
-      self.frame_player_status.rockets,
-      self.frame_player_status.max_rockets
+      player_status.rockets,
+      player_status.max_rockets
     )
     write_ammo_type_count(
       3,
       "Cell",
-      self.frame_player_status.cells,
-      self.frame_player_status.max_cells
+      player_status.cells,
+      player_status.max_cells
     )
 
     -- Cursor to right side of last line.
@@ -306,11 +286,11 @@ function M:refresh()
       self.screen.term_width - (right_arms_keys_cols - 1),
       "H "
     )
-    for i = 1, #self.frame_player_status.arms do -- Slots numbered 2-7.
+    for i = 1, #player_status.arms do -- Slots numbered 2-7.
       -- Foreground colour to xterm pure yellow or #121212, write slot number.
       scratch_buf:put(
         "\27[38;5;",
-        self.frame_player_status.arms[i] and 226 or 233,
+        player_status.arms[i] and 226 or 233,
         "m",
         i + 1
       )
@@ -320,43 +300,45 @@ function M:refresh()
       "     ",
       -- Foreground colour to xterm pure blue or #121212, write symbol.
       "\27[38;5;",
-      self.frame_player_status.has_blue_key and 21 or 233,
+      player_status.has_blue_key and 21 or 233,
       "m●",
       -- Foreground colour to xterm pure yellow or #121212, write symbol.
       "\27[38;5;",
-      self.frame_player_status.has_yellow_key and 226 or 233,
+      player_status.has_yellow_key and 226 or 233,
       "m●",
       -- Foreground colour to xterm pure red or #121212, write symbol.
       "\27[38;5;",
-      self.frame_player_status.has_red_key and 196 or 233,
+      player_status.has_red_key and 196 or 233,
       "m● "
     )
-
-    self.frame_player_status = nil
   end
 
-  if #self.frame_text_lines > 0 then
+  local did_set_msg_attrs = false
+  --- @param msg string
+  local function write_msg(msg, row, col)
     -- Set background colour to xterm pure black, foreground colour to xterm
     -- pure red.
-    scratch_buf:put "\27[48;5;16m\27[38;5;196m"
-
-    for _, text_line in ipairs(self.frame_text_lines) do
-      -- 0-indexed for both.
-      local row = math.floor(
-        (text_line.pix_y / self.screen.res_y) * self.screen.term_height
-      )
-      local col = math.floor(
-        (text_line.pix_x / self.screen.res_x) * self.screen.term_width
-      )
-
-      -- Cursor to position, write text.
-      scratch_buf:put("\27[", row + 1, ";", col + 1, "H", text_line.line)
-      if text_line.draw_cursor then
-        scratch_buf:put "_"
-      end
+    if not did_set_msg_attrs then
+      scratch_buf:put "\27[48;5;16m\27[38;5;196m"
+      did_set_msg_attrs = true
     end
+    scratch_buf:put("\27[", row, ";", col, "H", msg)
+  end
 
-    self.frame_text_lines = {}
+  if
+    self.draw_automap_title
+    and self.screen.term_height > 3 -- Drawn above left side of player status.
+  then
+    write_msg(self.screen.doom.automap_title, self.screen.term_height - 3, 1)
+  end
+  if self.draw_game_msgs then
+    write_msg(self.screen.doom.game_msg, 1, 1)
+  end
+  if self.draw_menu_msgs then
+    write_msg(self.screen.doom.menu_msg, 1, 1) -- TODO: center properly; multiline
+  end
+  if self.draw_paused then
+    write_msg("Pause", 3, math.floor((self.screen.term_width + 5) / 2))
   end
 
   -- When using RGB, it's possible for Nvim to run out of free highlight

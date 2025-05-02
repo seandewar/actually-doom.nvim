@@ -253,13 +253,17 @@ void D_Display(void)
     }
 
     // draw pause pic
-    if (paused && !detached_ui) {
-        if (automapactive)
-            y = 4;
-        else
-            y = viewwindowy + 4;
-        V_DrawPatchDirect(viewwindowx + (scaledviewwidth - 68) / 2, y,
-                          W_CacheLumpName("M_PAUSE", PU_CACHE));
+    if (paused) {
+        if (detached_ui) {
+            DG_DrawDetachedUI(DUI_PAUSED);
+        } else {
+            if (automapactive)
+                y = 4;
+            else
+                y = viewwindowy + 4;
+            V_DrawPatchDirect(viewwindowx + (scaledviewwidth - 68) / 2, y,
+                    W_CacheLumpName("M_PAUSE", PU_CACHE));
+        }
     }
 
     menuactivestate = menuactive;

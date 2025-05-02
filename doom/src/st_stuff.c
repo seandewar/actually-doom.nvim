@@ -935,15 +935,17 @@ void ST_Drawer(boolean fullscreen, boolean refresh)
     // Do red-/gold-shifts from damage/items
     ST_doPaletteStuff();
 
+    if (detached_ui) {
+        DG_DrawDetachedUI(DUI_STATUSBAR);
+        return;
+    }
+
     // If just after ST_Start(), refresh all
     if (st_firsttime)
         ST_doRefresh();
     // Otherwise, update as little as possible
     else
         ST_diffDraw();
-
-    if (detached_ui)
-        DG_DrawPlayerStatus(plyr);
 }
 
 typedef void (*load_callback_t)(char *lumpname, patch_t **variable);

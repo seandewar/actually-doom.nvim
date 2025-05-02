@@ -17,7 +17,6 @@
 
 #include <ctype.h>
 
-#include "doomgeneric.h"
 #include "doomkeys.h"
 #include "hu_lib.h"
 #include "i_swap.h"
@@ -78,11 +77,6 @@ void HUlib_drawTextLine(hu_textline_t *l, boolean drawcursor)
     int w;
     int x;
     unsigned char c;
-
-    if (detached_ui) {
-        DG_DrawHUTextLine(l, drawcursor);
-        return;
-    }
 
     // draw the new stuff
     x = l->x;

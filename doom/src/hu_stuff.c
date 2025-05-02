@@ -18,12 +18,14 @@
 #include "hu_stuff.h"
 #include "d_englsh.h"
 #include "doomdef.h"
+#include "doomgeneric.h"
 #include "doomkeys.h"
 #include "doomstat.h"
 #include "hu_lib.h"
 #include "i_swap.h"
 #include "m_controls.h"
 #include "m_misc.h"
+#include "r_main.h"
 #include "s_sound.h"
 #include "sounds.h"
 #include "w_wad.h"
@@ -204,6 +206,7 @@ void HU_Start(void)
         s = HU_TITLE_CHEX;
     }
 
+    DG_OnSetAutomapTitle(s);
     while (*s)
         HUlib_addCharToTextLine(&w_title, *(s++));
 
@@ -220,6 +223,14 @@ void HU_Start(void)
 
 void HU_Drawer(void)
 {
+    if (detached_ui) {
+        if (message_on)
+            DG_DrawDetachedUI(DUI_GAME_MESSAGE);
+        if (automapactive)
+            DG_DrawDetachedUI(DUI_AUTOMAP_TITLE);
+        return;
+    }
+
     HUlib_drawSText(&w_message);
     HUlib_drawIText(&w_chat);
     if (automapactive)
@@ -249,6 +260,7 @@ void HU_Ticker(void)
         if ((plr->message && !message_nottobefuckedwith)
             || (plr->message && message_dontfuckwithme)) {
             HUlib_addMessageToSText(&w_message, 0, plr->message);
+            DG_OnGameMessage("", plr->message);
             plr->message = 0;
             message_on = true;
             message_counter = HU_MSGTIMEOUT;
@@ -274,7 +286,8 @@ void HU_Ticker(void)
                                 || chat_dest[i] == HU_BROADCAST)) {
                             HUlib_addMessageToSText(&w_message, player_names[i],
                                                     w_inputbuffer[i].l.l);
-
+                            DG_OnGameMessage(player_names[i],
+                                                  w_inputbuffer[i].l.l);
                             message_nottobefuckedwith = true;
                             message_on = true;
                             message_counter = HU_MSGTIMEOUT;

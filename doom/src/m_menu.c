@@ -25,6 +25,7 @@
 #include "d_loop.h"
 #include "d_main.h"
 #include "doomdef.h"
+#include "doomgeneric.h"
 #include "doomkeys.h"
 #include "doomstat.h"
 #include "dstrings.h"
@@ -69,9 +70,9 @@ int screenSize;
 int quickSaveSlot;
 
 // 1 = message to be printed
-int messageToPrint;
+static int messageToPrint;
 // ...and here is the message string!
-char *messageString;
+static char *messageString;
 
 // message x & y
 int messx;
@@ -1030,6 +1031,7 @@ void M_StartMessage(char *string, void (*routine)(int), boolean input)
     messageRoutine = routine;
     messageNeedsInput = input;
     menuactive = true;
+    DG_OnMenuMessage(messageString);
     return;
 }
 
@@ -1313,8 +1315,7 @@ boolean M_Responder(event_t *ev)
             }
         }
 
-        menuactive = messageLastMenuActive;
-        messageToPrint = 0;
+        M_StopMessage();
         if (messageRoutine)
             messageRoutine(key);
 
@@ -1599,8 +1600,10 @@ void M_Drawer(void)
 
     // Horiz. & Vertically center string and print it.
     if (messageToPrint) {
-        if (detached_ui)
+        if (detached_ui) {
+            DG_DrawDetachedUI(DUI_MENU_MESSAGE);
             return;
+        }
 
         start = 0;
         y = SCREENHEIGHT / 2 - M_StringHeight(messageString) / 2;
@@ -1643,8 +1646,10 @@ void M_Drawer(void)
     if (currentMenu->routine)
         currentMenu->routine(); // call Draw routine
 
-    if (detached_ui)
+    if (detached_ui) {
+        DG_DrawDetachedUI(DUI_MENU);
         return;
+    }
 
     // DRAW MENU
     x = currentMenu->x;

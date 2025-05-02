@@ -4,8 +4,6 @@
 #include <stdint.h>
 
 #include "doomtype.h"
-#include "d_player.h"
-#include "hu_lib.h"
 #include "i_video.h"
 
 #define DOOMGENERIC_SCREEN_BUF_SIZE (SCREENWIDTH * SCREENHEIGHT * 3)
@@ -29,12 +27,23 @@ typedef struct {
     byte value;
 } input_t;
 
-// Implement below functions for your platform
+// TODO: finale, level end text
+typedef enum {
+    DUI_GAME_MESSAGE = 0,
+    DUI_MENU_MESSAGE = 1,
+    DUI_AUTOMAP_TITLE = 2,
+    DUI_STATUSBAR = 3,
+    DUI_MENU = 4,
+    DUI_PAUSED = 5,
+} duitype_t;
+
 void DG_Init(void);
 void DG_WipeTick(void);
+void DG_OnGameMessage(const char *prefix, const char *msg);
+void DG_OnMenuMessage(const char *msg);
+void DG_OnSetAutomapTitle(const char *title);
 void DG_DrawFrame(void);
-void DG_DrawHUTextLine(const hu_textline_t *l, boolean drawcursor);
-void DG_DrawPlayerStatus(const player_t *player);
+void DG_DrawDetachedUI(duitype_t ui);
 void DG_SleepMs(uint32_t ms);
 uint32_t DG_GetTicksMs(void);
 boolean DG_GetInput(input_t *input);

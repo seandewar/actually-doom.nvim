@@ -15,7 +15,9 @@
 #include <unistd.h>
 
 #include "d_items.h"
+#include "d_player.h"
 #include "doomgeneric.h"
+#include "doomstat.h"
 #include "i_system.h"
 #include "i_video.h"
 #include "m_argv.h"
@@ -39,19 +41,32 @@
 // Integer values are sent as little-endian (network byte order considered
 // cringe).
 enum {
-    // AMSG_FRAME, pixels: u24[res_x * res_y] (R8G8B8)
+    // AMSG_FRAME,
+    //   pixels: u24[res_x * res_y] (R8G8B8),
+    //   detached_ui_bits: u8 (see duitype_t for meaning)
     AMSG_FRAME = 0,
-
-    // AMSG_FRAME_HU_TEXT_LINE, x: i16, y: i16, drawcursor: u8, line: string
-    AMSG_FRAME_HU_TEXT_LINE = 4,
-
-    // AMSG_FRAME_PLAYER_STATUS, health: i16, armor: i16, ready_ammo: i16,
-    //      ammo: i16[NUMAMMO], max_ammo: i16[NUMAMMO], arms_bits: u8,
-    //      keys_bits: u8
-    AMSG_FRAME_PLAYER_STATUS = 5,
 
     // AMSG_FRAME_SHM_READY (no payload)
     AMSG_FRAME_SHM_READY = 3,
+
+    // AMSG_PLAYER_STATUS,
+    //   health: i16,
+    //   armor: i16,
+    //   ready_ammo: i16,
+    //   ammo: i16[NUMAMMO],
+    //   max_ammo: i16[NUMAMMO],
+    //   arms_bits: u8 (bits 0-5: slots 2-7),
+    //   keys_bits: u8 (bit 0: blue, 1: yellow, 2: red)
+    AMSG_PLAYER_STATUS = 5,
+
+    // AMSG_GAME_MESSAGE, msg: string
+    AMSG_GAME_MESSAGE = 4,
+
+    // AMSG_MENU_MESSAGE, msg: string
+    AMSG_MENU_MESSAGE = 6,
+
+    // AMSG_AUTOMAP_TITLE, title: string
+    AMSG_AUTOMAP_TITLE = 7,
 
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
@@ -95,7 +110,7 @@ static struct {
 
 static volatile sig_atomic_t interrupted;
 static uint32_t clock_start_ms;
-
+static byte enabled_dui_types;
 static boolean comm_writing_msg;
 
 #define COMM_WRITE_MSG(block)      \
@@ -121,6 +136,16 @@ typedef struct {
 
 static ringbuf_t comm_recv_buf;
 static ringbuf_t key_buf;
+
+typedef struct {
+    int health;
+    int armorpoints;
+    int ready_ammo;
+    int ammo[NUMAMMO];
+    int maxammo[NUMAMMO];
+    byte arms_bits;
+    byte key_bits;
+} player_status_t;
 
 static void SigintHandler(int signum)
 {
@@ -296,12 +321,6 @@ static void Comm_WriteBytes(const byte *p, size_t len)
     }
 }
 
-static void Comm_WriteBytesWithLen(const byte *b, uint16_t len)
-{
-    Comm_Write16(len);
-    Comm_WriteBytes(b, len);
-}
-
 static void Comm_WriteString(const char *s)
 {
     assert(comm_writing_msg);
@@ -315,7 +334,8 @@ static void Comm_WriteString(const char *s)
         I_Quit();
     }
 
-    Comm_WriteBytesWithLen((byte *)s, len);
+    Comm_Write16(len);
+    Comm_WriteBytes((byte *)s, len);
 }
 
 static void UnlinkFrameShm(void);
@@ -582,6 +602,8 @@ static void Comm_Receive(void)
     }
 }
 
+static void MaybeSendPlayerStatus(void);
+
 int main(int argc, char **argv)
 {
     // Set buffering to what's usually the default when run within a terminal.
@@ -599,6 +621,9 @@ int main(int argc, char **argv)
 
     doomgeneric_Create(argc, argv);
     while (true) {
+        if (gamestate == GS_LEVEL)
+            MaybeSendPlayerStatus();
+
         Comm_FlushSend(false);
         Comm_Receive();
         doomgeneric_Tick();
@@ -785,17 +810,85 @@ void DG_Init(void)
     });
 }
 
+static void MaybeSendPlayerStatus(void)
+{
+    static player_status_t last_status = {0};
+
+    const player_t *p = &players[consoleplayer];
+
+    player_status_t status;
+    status.health = p->health;
+    status.armorpoints = p->armorpoints;
+
+    ammotype_t ready_ammo_type = weaponinfo[p->readyweapon].ammo;
+    status.ready_ammo =
+        ready_ammo_type == am_noammo ? -1 : p->ammo[ready_ammo_type];
+
+    memcpy(status.ammo, p->ammo, sizeof p->ammo);
+    memcpy(status.maxammo, p->maxammo, sizeof p->maxammo);
+
+    status.arms_bits = 0;
+    for (int i = 0; i < 6; ++i) // Slots numbered 2-7.
+        status.arms_bits |= !!p->weaponowned[i + 1] << i;
+
+    status.key_bits = 0;
+    status.key_bits |= p->cards[it_bluecard] || p->cards[it_blueskull];
+    status.key_bits |= (p->cards[it_yellowcard] || p->cards[it_yellowskull])
+                       << 1;
+    status.key_bits |= (p->cards[it_redcard] || p->cards[it_redskull]) << 2;
+
+    if (status.health == last_status.health
+        && status.armorpoints == last_status.armorpoints
+        && status.ready_ammo == last_status.ready_ammo
+        && memcmp(status.ammo, last_status.ammo, sizeof status.ammo) == 0
+        && memcmp(status.maxammo, last_status.maxammo, sizeof status.maxammo)
+               == 0
+        && status.arms_bits == last_status.arms_bits
+        && status.key_bits == last_status.key_bits) {
+        return; // Unchanged.
+    }
+
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_PLAYER_STATUS);
+
+        assert((int16_t)status.health == status.health);
+        Comm_Write16(status.health);
+
+        assert((int16_t)status.armorpoints == status.armorpoints);
+        Comm_Write16(status.armorpoints);
+
+        assert((int16_t)status.ready_ammo == status.ready_ammo);
+        Comm_Write16(status.ready_ammo);
+
+        for (int i = 0; i < NUMAMMO; ++i) {
+            assert((int16_t)status.ammo[i] == status.ammo[i]);
+            Comm_Write16(status.ammo[i]);
+        }
+        for (int i = 0; i < NUMAMMO; ++i) {
+            assert((int16_t)status.maxammo[i] == status.maxammo[i]);
+            Comm_Write16(status.maxammo[i]);
+        }
+
+        Comm_Write8(status.arms_bits);
+        Comm_Write8(status.key_bits);
+    });
+
+    last_status = status;
+}
+
 void DG_DrawFrame(void)
 {
     if (frame_shm_name[0] == '\0') {
-        // Just send it over the socket.
+        // Just send pixels over the socket with player status information.
         COMM_WRITE_MSG({
             Comm_Write8(AMSG_FRAME);
             Comm_WriteBytes(DG_ScreenBuffer, DOOMGENERIC_SCREEN_BUF_SIZE);
+            Comm_Write8(enabled_dui_types);
         });
-        screenvisible = false;
-        return;
+
+        goto end;
     }
+
     // Old file descriptor should already be closed, but make sure anyway.
     CloseFrameShm();
 
@@ -840,60 +933,43 @@ void DG_DrawFrame(void)
     }
 
     COMM_WRITE_MSG(Comm_Write8(AMSG_FRAME_SHM_READY));
+
+end:
     screenvisible = false;
+    enabled_dui_types = 0;
 }
 
-void DG_DrawHUTextLine(const hu_textline_t *l, boolean drawcursor)
+void DG_DrawDetachedUI(duitype_t ui)
 {
-    if (l->len <= 0 && !drawcursor)
-        return;
+    assert(ui < CHAR_BIT);
+    enabled_dui_types |= 1 << ui;
+}
 
+void DG_OnGameMessage(const char *prefix, const char *msg)
+{
     COMM_WRITE_MSG({
-        Comm_Write8(AMSG_FRAME_HU_TEXT_LINE);
-        assert((int16_t)l->x == l->x);
-        Comm_Write16(l->x);
-        assert((int16_t)l->y == l->y);
-        Comm_Write16(l->y);
-        Comm_Write8(drawcursor);
-        assert(l->len <= UINT16_MAX);
-        Comm_WriteBytesWithLen((byte *)l->l, l->len);
+        Comm_Write8(AMSG_GAME_MESSAGE);
+        size_t prefix_len = strlen(prefix);
+        size_t msg_len = strlen(msg);
+        Comm_Write16(prefix_len + msg_len);
+        Comm_WriteBytes((byte *)prefix, prefix_len);
+        Comm_WriteBytes((byte *)msg, msg_len);
     });
 }
 
-void DG_DrawPlayerStatus(const player_t *p)
+void DG_OnMenuMessage(const char *msg)
 {
     COMM_WRITE_MSG({
-        Comm_Write8(AMSG_FRAME_PLAYER_STATUS);
-        assert((int16_t)p->health == p->health);
-        Comm_Write16(p->health);
-        assert((int16_t)p->armorpoints == p->armorpoints);
-        Comm_Write16(p->armorpoints);
+        Comm_Write8(AMSG_MENU_MESSAGE);
+        Comm_WriteString(msg);
+    });
+}
 
-        ammotype_t ready_ammo_type = weaponinfo[p->readyweapon].ammo;
-        int ready_ammo =
-            ready_ammo_type == am_noammo ? -1 : p->ammo[ready_ammo_type];
-        assert((int16_t)ready_ammo == ready_ammo);
-        Comm_Write16(ready_ammo);
-
-        for (int i = 0; i < NUMAMMO; ++i) {
-            assert((int16_t)p->ammo[i] == p->ammo[i]);
-            Comm_Write16(p->ammo[i]);
-        }
-        for (int i = 0; i < NUMAMMO; ++i) {
-            assert((int16_t)p->maxammo[i] == p->maxammo[i]);
-            Comm_Write16(p->maxammo[i]);
-        }
-
-        byte arms_bits = 0;
-        for (int i = 0; i < 6; ++i) // Slots numbered 2-7.
-            arms_bits |= !!p->weaponowned[i + 1] << i;
-        Comm_Write8(arms_bits);
-
-        byte key_bits = 0;
-        key_bits |= p->cards[it_bluecard] || p->cards[it_blueskull];
-        key_bits |= (p->cards[it_yellowcard] || p->cards[it_yellowskull]) << 1;
-        key_bits |= (p->cards[it_redcard] || p->cards[it_redskull]) << 2;
-        Comm_Write8(key_bits);
+void DG_OnSetAutomapTitle(const char *title)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_AUTOMAP_TITLE);
+        Comm_WriteString(title);
     });
 }
 

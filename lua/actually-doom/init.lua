@@ -46,6 +46,23 @@ local script_dir = (function()
   return fn.fnamemodify(debug.getinfo(2, "S").source:sub(2), ":h:p")
 end)()
 
+--- @class (exact) PlayerStatus
+--- @field health integer
+--- @field armour integer
+--- @field ready_ammo integer?
+--- @field bullets integer
+--- @field shells integer
+--- @field rockets integer
+--- @field cells integer
+--- @field max_bullets integer
+--- @field max_shells integer
+--- @field max_rockets integer
+--- @field max_cells integer
+--- @field arms table<integer, boolean>
+--- @field has_blue_key boolean
+--- @field has_yellow_key boolean
+--- @field has_red_key boolean
+
 --- @class (exact) PressedKey
 --- @field key integer
 --- @field shift boolean
@@ -62,6 +79,10 @@ end)()
 --- @field pressed_key PressedKey?
 --- @field mouse_button_mask integer
 --- @field screen Screen?
+--- @field player_status PlayerStatus?
+--- @field game_msg string
+--- @field menu_msg string
+--- @field automap_title string
 --- @field closed boolean?
 ---
 --- @field run function
@@ -420,17 +441,6 @@ local function recv_msg_loop(doom, buf)
     end
     return buf:get(n)
   end
-  --- @param n integer
-  local function skip_bytes(n)
-    while n > 0 do
-      local skipn = math.min(n, #buf)
-      buf:skip(skipn)
-      n = n - skipn
-      if n > 0 then
-        coroutine.yield()
-      end
-    end
-  end
 
   --- @return integer
   local function read_u8()
@@ -453,9 +463,6 @@ local function recv_msg_loop(doom, buf)
   --- @return string
   local function read_string()
     return read_bytes(read_u16())
-  end
-  local function skip_string()
-    return skip_bytes(read_u16())
   end
 
   local proto_version = read_u32()
@@ -500,41 +507,28 @@ local function recv_msg_loop(doom, buf)
         doom.screen.res_y,
         doom.screen.res_x
       )
+
+      local pixels = read_bytes(len)
+      local enabled_dui_bits = read_u8()
+
       if doom.screen.gfx.type == "cell" then
         local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
-        cell_gfx.frame_pixels = read_bytes(len)
-        cell_gfx:refresh()
-      else
-        skip_bytes(len)
-      end
+        cell_gfx.frame_pixels = pixels
 
+        cell_gfx.draw_game_msgs = bit.band(enabled_dui_bits, 1) ~= 0
+        cell_gfx.draw_menu_msgs = bit.band(enabled_dui_bits, 2) ~= 0
+        cell_gfx.draw_automap_title = bit.band(enabled_dui_bits, 4) ~= 0
+        cell_gfx.draw_status_bar = bit.band(enabled_dui_bits, 8) ~= 0
+        cell_gfx.draw_paused = bit.band(enabled_dui_bits, 32) ~= 0
+        cell_gfx:refresh()
+      end
       if doom.screen.visible then
         doom:send_frame_request()
         doom:schedule_check()
       end
     end,
 
-    -- AMSG_FRAME_HU_TEXT_LINE
-    [4] = function()
-      local x = read_i16()
-      local y = read_i16()
-      local draw_cursor = read_u8() ~= 0
-
-      if doom.screen.gfx.type == "cell" then
-        local line = read_string()
-        local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
-        cell_gfx.frame_text_lines[#cell_gfx.frame_text_lines + 1] = {
-          pix_x = x,
-          pix_y = y,
-          draw_cursor = draw_cursor,
-          line = line,
-        }
-      else
-        skip_string()
-      end
-    end,
-
-    -- AMSG_FRAME_PLAYER_STATUS
+    -- AMSG_PLAYER_STATUS
     [5] = function()
       local health = read_i16()
       local armour = read_i16()
@@ -550,34 +544,57 @@ local function recv_msg_loop(doom, buf)
       local arms_bits = read_u8()
       local key_bits = read_u8()
 
-      if doom.screen.gfx.type == "cell" then
-        local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
-        cell_gfx.frame_player_status = {
-          health = health,
-          armour = armour,
-          ready_ammo = ready_ammo >= 0 and ready_ammo or nil,
-          bullets = bullets,
-          shells = shells,
-          rockets = rockets,
-          cells = cells,
-          max_bullets = max_bullets,
-          max_shells = max_shells,
-          max_rockets = max_rockets,
-          max_cells = max_cells,
-          arms = {
-            [0] = true, -- Slot 1 (index 0) always occupied.
-            [1] = bit.band(arms_bits, 1) ~= 0,
-            [2] = bit.band(arms_bits, 2) ~= 0,
-            [3] = bit.band(arms_bits, 4) ~= 0,
-            [4] = bit.band(arms_bits, 8) ~= 0,
-            [5] = bit.band(arms_bits, 16) ~= 0,
-            [6] = bit.band(arms_bits, 32) ~= 0,
-          },
-          has_blue_key = bit.band(key_bits, 1) ~= 0,
-          has_yellow_key = bit.band(key_bits, 2) ~= 0,
-          has_red_key = bit.band(key_bits, 4) ~= 0,
-        }
-      end
+      doom.player_status = {
+        health = health,
+        armour = armour,
+        ready_ammo = ready_ammo >= 0 and ready_ammo or nil,
+        bullets = bullets,
+        shells = shells,
+        rockets = rockets,
+        cells = cells,
+        max_bullets = max_bullets,
+        max_shells = max_shells,
+        max_rockets = max_rockets,
+        max_cells = max_cells,
+        arms = {
+          bit.band(arms_bits, 1) ~= 0,
+          bit.band(arms_bits, 2) ~= 0,
+          bit.band(arms_bits, 4) ~= 0,
+          bit.band(arms_bits, 8) ~= 0,
+          bit.band(arms_bits, 16) ~= 0,
+          bit.band(arms_bits, 32) ~= 0,
+        },
+        has_blue_key = bit.band(key_bits, 1) ~= 0,
+        has_yellow_key = bit.band(key_bits, 2) ~= 0,
+        has_red_key = bit.band(key_bits, 4) ~= 0,
+      }
+    end,
+
+    -- AMSG_GAME_MESSAGE
+    [4] = function()
+      doom.game_msg = read_string()
+      doom.console:plugin_print(
+        ('AMSG_GAME_MESSAGE: msg="%s"\n'):format(doom.game_msg),
+        "Debug"
+      )
+    end,
+
+    -- AMSG_MENU_MESSAGE
+    [6] = function()
+      doom.menu_msg = read_string()
+      doom.console:plugin_print(
+        ('AMSG_MENU_MESSAGE: msg="%s"\n'):format(doom.menu_msg),
+        "Debug"
+      )
+    end,
+
+    -- AMSG_AUTOMAP_TITLE
+    [7] = function()
+      doom.automap_title = read_string()
+      doom.console:plugin_print(
+        ('AMSG_AUTOMAP_TITLE: title="%s"\n'):format(doom.automap_title),
+        "Debug"
+      )
     end,
 
     -- AMSG_FRAME_SHM_READY
@@ -710,6 +727,9 @@ function Doom.run()
     check_timer = assert(uv.new_timer()),
     send_buf = require("string.buffer").new(256),
     mouse_button_mask = 0,
+    game_msg = "",
+    menu_msg = "",
+    automap_title = "",
   }, { __index = Doom })
   doom.console = require("actually-doom.ui").Console.new(doom)
 
