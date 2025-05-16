@@ -37,10 +37,10 @@ do
       return -- May be used to leave Terminal mode; don't intercept.
     elseif key == ctrl_k then
       -- Toggle kitty graphics protocol support.
-      doom:enable_kitty(doom.screen.gfx.type ~= "kitty")
+      doom:enable_kitty(not doom.screen:kitty_gfx())
       doom.console:plugin_print(
         ("kitty graphics protocol %s\n"):format(
-          doom.screen.gfx.type == "kitty" and "ON" or "OFF"
+          doom.screen:kitty_gfx() and "ON" or "OFF"
         )
       )
       return "" -- Nom nom nom
@@ -558,6 +558,18 @@ end
 function Screen:set_gfx(gfx, ...)
   self.gfx:close()
   self.gfx = gfx.new(self, ...)
+end
+
+--- @return CellGfx?
+--- @nodiscard
+function Screen:cell_gfx()
+  return self.gfx.type == "cell" and self.gfx --[[@as CellGfx]] or nil
+end
+
+--- @return KittyGfx?
+--- @nodiscard
+function Screen:kitty_gfx()
+  return self.gfx.type == "kitty" and self.gfx --[[@as KittyGfx]] or nil
 end
 
 function Screen:goto_win()

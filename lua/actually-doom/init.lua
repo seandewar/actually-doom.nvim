@@ -350,13 +350,15 @@ function Doom:enable_kitty(on)
     put_string(self.send_buf, name or "")
   end
 
-  if on and self.screen.gfx.type ~= "kitty" then
+  if on and not self.screen:kitty_gfx() then
     local shm_name = ("/actually-doom:%d"):format(self.process.pid)
     send_frame_shm_name(shm_name)
+    self:send_set_config_var("detached_ui", "0")
     self:schedule_check()
     self.screen:set_gfx(require "actually-doom.ui.kitty", shm_name)
-  elseif not on and self.screen.gfx.type == "kitty" then
+  elseif not on and self.screen:kitty_gfx() then
     send_frame_shm_name()
+    self:send_set_config_var("detached_ui", "1")
     self:schedule_check()
     self.screen:set_gfx(require "actually-doom.ui.cell")
   end
@@ -490,6 +492,7 @@ local function recv_msg_loop(doom, buf)
   end
 
   doom.screen = require("actually-doom.ui").Screen.new(doom, res_x, res_y)
+  doom:send_set_config_var("detached_ui", "1")
   -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only available
   -- as a modifier for other keys), so use X.
   doom:send_set_config_var("key_fire", "45") -- DOS scancode for x.
@@ -511,8 +514,8 @@ local function recv_msg_loop(doom, buf)
       local pixels = read_bytes(len)
       local enabled_dui_bits = read_u8()
 
-      if doom.screen.gfx.type == "cell" then
-        local cell_gfx = doom.screen.gfx --[[@as CellGfx]]
+      local cell_gfx = doom.screen:cell_gfx()
+      if cell_gfx then
         cell_gfx.frame_pixels = pixels
 
         cell_gfx.draw_game_msgs = bit.band(enabled_dui_bits, 1) ~= 0
@@ -599,7 +602,7 @@ local function recv_msg_loop(doom, buf)
 
     -- AMSG_FRAME_SHM_READY
     [3] = function()
-      if doom.screen.gfx.type == "kitty" then
+      if doom.screen:kitty_gfx() then
         doom.screen.gfx:refresh()
       end
 

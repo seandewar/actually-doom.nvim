@@ -169,8 +169,11 @@ void D_Display(void)
         return; // for comparative timing / profiling
 
     if (detached_ui != old_detached_ui) {
-        redrawsbar = true;    // force status bar redraw
-        setsizeneeded = true; // refresh view size, force background redraw
+        redrawsbar = true; // force status bar redraw
+
+        // Default to fullscreen for detached UI, or with statusbar otherwise.
+        screenblocks = detached_ui ? 11 : 10;
+        R_SetViewSize(screenblocks, detailLevel);
     }
 
     // change or refresh the view size if needed
@@ -262,7 +265,7 @@ void D_Display(void)
             else
                 y = viewwindowy + 4;
             V_DrawPatchDirect(viewwindowx + (scaledviewwidth - 68) / 2, y,
-                    W_CacheLumpName("M_PAUSE", PU_CACHE));
+                              W_CacheLumpName("M_PAUSE", PU_CACHE));
         }
     }
 
@@ -340,6 +343,7 @@ void D_BindVariables(void)
     M_BindVariable("music_volume", &musicVolume);
     M_BindVariable("show_messages", &showMessages);
     M_BindVariable("screenblocks", &screenblocks);
+    M_BindVariable("screensize", &screenblocks);
     M_BindVariable("detaillevel", &detailLevel);
     M_BindVariable("snd_channels", &snd_channels);
     M_BindVariable("vanilla_savegame_limit", &vanilla_savegame_limit);
