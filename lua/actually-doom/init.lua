@@ -332,11 +332,10 @@ end
 
 --- @param on boolean?
 function Doom:enable_kitty(on)
-  -- TODO: these checks + in_fast_event checks are icky; simplify or remove
-  -- them and let callers handle this; also split the UI handles portion of
-  -- Screen into an optional object that's nil when the UI creation is still
-  -- scheduling
-  if not self.screen or not self.screen.buf or vim.in_fast_event() then
+  -- TODO: these checks are icky; simplify or remove them; also split the UI
+  -- handles portion of Screen into an optional object that's nil when the UI
+  -- creation is still scheduling
+  if not self.screen or not self.screen.buf then
     vim.schedule(function()
       self:enable_kitty(on)
     end)
@@ -434,8 +433,7 @@ end
 --- @param buf string.buffer
 local function recv_msg_loop(doom, buf)
   --- @param n integer (0 gives an empty string)
-  --- @return string; prefer skip_bytes if discarding, which can clear skipped
-  --- bytes without waiting for all to be buffered.
+  --- @return string
   --- @nodiscard
   local function read_bytes(n)
     while n > #buf do
@@ -523,7 +521,9 @@ local function recv_msg_loop(doom, buf)
         cell_gfx.draw_automap_title = bit.band(enabled_dui_bits, 4) ~= 0
         cell_gfx.draw_status_bar = bit.band(enabled_dui_bits, 8) ~= 0
         cell_gfx.draw_paused = bit.band(enabled_dui_bits, 32) ~= 0
-        cell_gfx:refresh()
+        vim.schedule(function()
+          cell_gfx:refresh()
+        end)
       end
       if doom.screen.visible then
         doom:send_frame_request()
@@ -602,8 +602,11 @@ local function recv_msg_loop(doom, buf)
 
     -- AMSG_FRAME_SHM_READY
     [3] = function()
-      if doom.screen:kitty_gfx() then
-        doom.screen.gfx:refresh()
+      local kitty_gfx = doom.screen:kitty_gfx()
+      if kitty_gfx then
+        vim.schedule(function()
+          kitty_gfx:refresh()
+        end)
       end
 
       if doom.screen.visible then
@@ -619,7 +622,9 @@ local function recv_msg_loop(doom, buf)
         ('AMSG_SET_TITLE: title="%s"\n'):format(doom.screen.title),
         "Debug"
       )
-      doom.screen:update_title()
+      vim.schedule(function()
+        doom.screen:update_title()
+      end)
     end,
 
     -- AMSG_QUIT
@@ -784,7 +789,9 @@ function Doom:close(close_console_win)
   -- Close console before the screen so it doesn't print the "buffer was
   -- unloaded" message from us closing the screen.
   if self.console then
-    self.console:close(close_console_win)
+    vim.schedule(function()
+      self.console:close(close_console_win)
+    end)
   end
   if self.screen then
     self.screen:close()

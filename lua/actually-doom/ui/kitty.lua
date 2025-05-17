@@ -421,21 +421,14 @@ function M:close()
 end
 
 function M:refresh()
-  local function check_term_size()
-    local old_term_width = self.screen.term_width
-    local old_term_height = self.screen.term_height
-    self.screen:update_term_size()
-    if
-      self.screen.term_width ~= old_term_width
-      or self.screen.term_height ~= old_term_height
-    then
-      setup_term_buf(self)
-    end
-  end
-  if vim.in_fast_event() then
-    vim.schedule(check_term_size)
-  else
-    check_term_size()
+  local old_term_width = self.screen.term_width
+  local old_term_height = self.screen.term_height
+  self.screen:update_term_size()
+  if
+    self.screen.term_width ~= old_term_width
+    or self.screen.term_height ~= old_term_height
+  then
+    setup_term_buf(self)
   end
 
   -- Read frame image data (24-bit RGB) from the shared memory object.

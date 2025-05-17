@@ -317,13 +317,6 @@ end
 
 --- @param close_win boolean?
 function Console:close(close_win)
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:close()
-    end)
-    return
-  end
-
   if self.close_autocmd then
     api.nvim_del_autocmd(self.close_autocmd)
   end
@@ -333,13 +326,6 @@ function Console:close(close_win)
 end
 
 function Console:update_buf_name()
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:update_buf_name()
-    end)
-    return
-  end
-
   if api.nvim_buf_is_valid(self.buf) then
     local old_name = api.nvim_buf_get_name(self.buf)
     local new_name = ("actually-doom://console//%d"):format(self.buf)
@@ -491,7 +477,7 @@ function Screen.new(doom, res_x, res_y)
     screen.tmux_passthrough = true
   end
 
-  local function create_ui()
+  vim.schedule(function()
     -- It's possible we were closed beforehand if this operation was scheduled.
     if screen.closed or doom.closed then
       return
@@ -524,13 +510,7 @@ function Screen.new(doom, res_x, res_y)
     api.nvim_set_option_value("scrollback", 1, { buf = screen.buf })
 
     screen:goto_win()
-  end
-  -- If in a fast context, we can't create the UI immediately.
-  if vim.in_fast_event() then
-    vim.schedule(doom:close_on_err_wrap(create_ui))
-  else
-    create_ui()
-  end
+  end)
 
   screen.gfx = require("actually-doom.ui.cell").new(screen)
   return screen
@@ -538,19 +518,15 @@ end
 
 function Screen:close()
   self.closed = true
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:close()
-    end)
-    return
-  end
-
   self.gfx:close()
+
   if self.buf then
     M.screen_buf_to_doom[self.buf] = nil
-    if api.nvim_buf_is_valid(self.buf) then
-      api.nvim_buf_delete(self.buf, { force = true })
-    end
+    vim.schedule(function()
+      if api.nvim_buf_is_valid(self.buf) then
+        api.nvim_buf_delete(self.buf, { force = true })
+      end
+    end)
   end
 end
 
@@ -563,23 +539,19 @@ end
 --- @return CellGfx?
 --- @nodiscard
 function Screen:cell_gfx()
-  return self.gfx.type == "cell" and self.gfx --[[@as CellGfx]] or nil
+  return self.gfx.type == "cell" and self.gfx --[[@as CellGfx]]
+    or nil
 end
 
 --- @return KittyGfx?
 --- @nodiscard
 function Screen:kitty_gfx()
-  return self.gfx.type == "kitty" and self.gfx --[[@as KittyGfx]] or nil
+  return self.gfx.type == "kitty" and self.gfx --[[@as KittyGfx]]
+    or nil
 end
 
 function Screen:goto_win()
   if self.closed or self.doom.closed then
-    return
-  end
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:goto_win()
-    end)
     return
   end
   if self.win and api.nvim_win_is_valid(self.win) then
@@ -616,12 +588,6 @@ function Screen:update_term_size()
   if self.closed then
     return
   end
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:update_term_size()
-    end)
-    return
-  end
 
   -- Get its size by moving the cursor to the bottom-right and then query its
   -- position (DSR).
@@ -634,10 +600,7 @@ function Screen:update_term_size()
 end
 
 function Screen:update_title()
-  if vim.in_fast_event() or not self.win then
-    vim.schedule(function()
-      self:update_title()
-    end)
+  if not self.win then
     return
   end
 

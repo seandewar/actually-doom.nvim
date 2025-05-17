@@ -130,12 +130,6 @@ function M:refresh()
   if not self.screen.term_chan then
     return
   end
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:refresh()
-    end)
-    return
-  end
 
   --- @param x integer (0-indexed)
   --- @param y integer (0-indexed)
