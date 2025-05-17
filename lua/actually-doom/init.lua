@@ -514,15 +514,15 @@ local function recv_msg_loop(doom, buf)
 
       local cell_gfx = doom.screen:cell_gfx()
       if cell_gfx then
-        cell_gfx.frame_pixels = pixels
-
-        cell_gfx.draw_game_msgs = bit.band(enabled_dui_bits, 1) ~= 0
-        cell_gfx.draw_menu_msgs = bit.band(enabled_dui_bits, 2) ~= 0
-        cell_gfx.draw_automap_title = bit.band(enabled_dui_bits, 4) ~= 0
-        cell_gfx.draw_status_bar = bit.band(enabled_dui_bits, 8) ~= 0
-        cell_gfx.draw_paused = bit.band(enabled_dui_bits, 32) ~= 0
         vim.schedule(function()
-          cell_gfx:refresh()
+          cell_gfx:refresh(
+            pixels,
+            bit.band(enabled_dui_bits, 1) ~= 0,
+            bit.band(enabled_dui_bits, 2) ~= 0,
+            bit.band(enabled_dui_bits, 4) ~= 0,
+            bit.band(enabled_dui_bits, 8) ~= 0,
+            bit.band(enabled_dui_bits, 32) ~= 0
+          )
         end)
       end
       if doom.screen.visible then

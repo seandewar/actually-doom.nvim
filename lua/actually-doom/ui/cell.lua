@@ -15,12 +15,6 @@ end
 
 --- @class (exact) CellGfx: Gfx
 --- @field screen Screen
---- @field frame_pixels string?
---- @field draw_game_msgs boolean?
---- @field draw_menu_msgs boolean?
---- @field draw_automap_title boolean?
---- @field draw_status_bar boolean?
---- @field draw_paused boolean?
 --- @field clear_hl_tables_ticker integer
 ---
 --- @field new function
@@ -126,7 +120,20 @@ end
 local right_arms_keys_cols = #" 234567     XXX "
 local right_ammo_cols = #" Bull XXX / XXX "
 
-function M:refresh()
+--- @param pixels string
+--- @param draw_game_msgs boolean?
+--- @param draw_menu_msgs boolean?
+--- @param draw_automap_title boolean?
+--- @param draw_status_bar boolean?
+--- @param draw_paused boolean?
+function M:refresh(
+  pixels,
+  draw_game_msgs,
+  draw_menu_msgs,
+  draw_automap_title,
+  draw_status_bar,
+  draw_paused
+)
   if not self.screen.term_chan then
     return
   end
@@ -155,55 +162,53 @@ function M:refresh()
   -- Reset attributes, clear screen, clear scrollback, cursor to 0,0.
   scratch_buf:put "\27[m\27[2J\27[3J\27[H"
 
-  if self.frame_pixels then
-    local prev_colour
-    for y = 0, self.screen.term_height - 1 do -- 0-indexed
-      for x = 0, self.screen.term_width - 1 do -- 0-indexed
-        -- Pixel positions are 0-indexed.
-        local pix_x, pix_y = pixel_topleft_pos(x, y)
-        local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
-        pix_x2 = math.min(self.screen.res_x - 1, pix_x2)
-        pix_y2 = math.min(self.screen.res_y - 1, pix_y2)
-        local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
+  local prev_colour
+  for y = 0, self.screen.term_height - 1 do -- 0-indexed
+    for x = 0, self.screen.term_width - 1 do -- 0-indexed
+      -- Pixel positions are 0-indexed.
+      local pix_x, pix_y = pixel_topleft_pos(x, y)
+      local pix_x2, pix_y2 = pixel_topleft_pos(x + 1, y + 1)
+      pix_x2 = math.min(self.screen.res_x - 1, pix_x2)
+      pix_y2 = math.min(self.screen.res_y - 1, pix_y2)
+      local pix_count = (pix_x2 + 1 - pix_x) * (pix_y2 + 1 - pix_y)
 
-        -- Average the colours of all pixels within this cell.
-        local r, g, b = 0, 0, 0
-        for py = pix_y, pix_y2 do
-          for px = pix_x, pix_x2 do
-            local pi = M.pixel_index(px, py, self.screen.res_x) + 1
-            local pr, pg, pb = self.frame_pixels:byte(pi, pi + 3)
-            r = r + pr
-            g = g + pg
-            b = b + pb
-          end
+      -- Average the colours of all pixels within this cell.
+      local r, g, b = 0, 0, 0
+      for py = pix_y, pix_y2 do
+        for px = pix_x, pix_x2 do
+          local pi = M.pixel_index(px, py, self.screen.res_x) + 1
+          local pr, pg, pb = pixels:byte(pi, pi + 3)
+          r = r + pr
+          g = g + pg
+          b = b + pb
         end
-        r = math.min(255, math.floor(r / pix_count + 0.5))
-        g = math.min(255, math.floor(g / pix_count + 0.5))
-        b = math.min(255, math.floor(b / pix_count + 0.5))
-        local colour = true_colour and rgb_key(r, g, b)
-          or rgb_to_xterm256(r, g, b)
+      end
+      r = math.min(255, math.floor(r / pix_count + 0.5))
+      g = math.min(255, math.floor(g / pix_count + 0.5))
+      b = math.min(255, math.floor(b / pix_count + 0.5))
+      local colour = true_colour and rgb_key(r, g, b)
+        or rgb_to_xterm256(r, g, b)
 
-        -- Only emit an escape sequence if the colour changed.
-        if colour ~= prev_colour then
-          if true_colour then
-            -- Set background RGB "true" colour.
-            scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m")
-          else
-            -- Set background xterm-256 colour.
-            scratch_buf:put("\27[48;5;", colour, "m")
-          end
-          prev_colour = colour
+      -- Only emit an escape sequence if the colour changed.
+      if colour ~= prev_colour then
+        if true_colour then
+          -- Set background RGB "true" colour.
+          scratch_buf:put("\27[48;2;", r, ";", g, ";", b, "m")
+        else
+          -- Set background xterm-256 colour.
+          scratch_buf:put("\27[48;5;", colour, "m")
         end
-        scratch_buf:put " "
+        prev_colour = colour
       end
-      if y + 1 < self.screen.term_height then
-        scratch_buf:put "\r\n"
-      end
+      scratch_buf:put " "
+    end
+    if y + 1 < self.screen.term_height then
+      scratch_buf:put "\r\n"
     end
   end
 
   local player_status = self.screen.doom.player_status
-  if self.draw_status_bar and player_status then
+  if draw_status_bar and player_status then
     -- Set background colour to xterm #3a3a3a.
     scratch_buf:put "\27[48;5;237m"
     -- Cursor to last line.
@@ -320,18 +325,18 @@ function M:refresh()
   end
 
   if
-    self.draw_automap_title
+    draw_automap_title
     and self.screen.term_height > 3 -- Drawn above left side of player status.
   then
     write_msg(self.screen.doom.automap_title, self.screen.term_height - 3, 1)
   end
-  if self.draw_game_msgs then
+  if draw_game_msgs then
     write_msg(self.screen.doom.game_msg, 1, 1)
   end
-  if self.draw_menu_msgs then
+  if draw_menu_msgs then
     write_msg(self.screen.doom.menu_msg, 1, 1) -- TODO: center properly; multiline
   end
-  if self.draw_paused then
+  if draw_paused then
     write_msg("Pause", 3, math.floor((self.screen.term_width + 5) / 2))
   end
 

@@ -438,7 +438,6 @@ end
 --- @class (exact) Gfx
 --- @field new fun(Screen, ...): Gfx
 --- @field close fun(Gfx)
---- @field refresh fun(Gfx, ...)
 --- @field type string
 
 --- @class (exact) Screen
