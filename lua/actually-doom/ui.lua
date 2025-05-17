@@ -20,7 +20,7 @@ do
   local ctrl_o = vim.keycode "<C-O>"
   local ctrl_t = vim.keycode "<C-T>"
 
-  vim.on_key(function(key, _)
+  vim.on_key(function(key)
     if api.nvim_get_mode().mode ~= "t" then
       return
     end
@@ -112,7 +112,7 @@ api.nvim_create_autocmd({ "BufEnter", "WinClosed", "VimEnter" }, {
 api.nvim_create_autocmd("WinLeave", {
   group = augroup,
   nested = true,
-  callback = function(_)
+  callback = function()
     local win = api.nvim_get_current_win()
     local buf = api.nvim_win_get_buf(win)
     local doom = M.screen_buf_to_doom[buf]
@@ -189,7 +189,7 @@ api.nvim_create_autocmd({ "VimResized", "VimEnter", "TabEnter", "OptionSet" }, {
 })
 api.nvim_create_autocmd("WinResized", {
   group = augroup,
-  callback = function(_)
+  callback = function()
     if vim.tbl_isempty(M.screen_buf_to_doom) then
       return
     end

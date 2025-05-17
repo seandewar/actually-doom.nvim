@@ -103,34 +103,6 @@ char endstring[160];
 
 // static boolean opldev;
 
-//
-// MENU TYPEDEFS
-//
-typedef struct {
-    // 0 = no cursor here, 1 = ok, 2 = arrows ok
-    short status;
-
-    char name[10];
-
-    // choice = menu item #.
-    // if status = 2,
-    //   choice=0:leftarrow,1:rightarrow
-    void (*routine)(int choice);
-
-    // hotkey in menu
-    char alphaKey;
-} menuitem_t;
-
-typedef struct menu_s {
-    short numitems;          // # of menu items
-    struct menu_s *prevMenu; // previous menu
-    menuitem_t *menuitems;   // menu items
-    void (*routine)(void);   // draw routine
-    short x;
-    short y;      // x,y of menu
-    short lastOn; // last item user was on in menu
-} menu_t;
-
 short itemOn;           // menu item skull is on
 short skullAnimCounter; // skull animation counter
 short whichSkull;       // which skull to draw
@@ -641,8 +613,10 @@ void M_DrawReadThis2(void)
 //
 void M_DrawSound(void)
 {
-    if (!detached_ui)
-        V_DrawPatchDirect(60, 38, W_CacheLumpName("M_SVOL", PU_CACHE));
+    if (detached_ui)
+        return;
+
+    V_DrawPatchDirect(60, 38, W_CacheLumpName("M_SVOL", PU_CACHE));
 
     M_DrawThermo(SoundDef.x, SoundDef.y + LINEHEIGHT * (sfx_vol + 1), 16,
                  sfxVolume);
@@ -703,10 +677,11 @@ void M_DrawMainMenu(void)
 //
 void M_DrawNewGame(void)
 {
-    if (!detached_ui) {
-        V_DrawPatchDirect(96, 14, W_CacheLumpName("M_NEWG", PU_CACHE));
-        V_DrawPatchDirect(54, 38, W_CacheLumpName("M_SKILL", PU_CACHE));
-    }
+    if (detached_ui)
+        return;
+
+    V_DrawPatchDirect(96, 14, W_CacheLumpName("M_NEWG", PU_CACHE));
+    V_DrawPatchDirect(54, 38, W_CacheLumpName("M_SKILL", PU_CACHE));
 }
 
 void M_NewGame(int choice)
@@ -733,8 +708,10 @@ int epi;
 
 void M_DrawEpisode(void)
 {
-    if (!detached_ui)
-        V_DrawPatchDirect(54, 38, W_CacheLumpName("M_EPISOD", PU_CACHE));
+    if (detached_ui)
+        return;
+
+    V_DrawPatchDirect(54, 38, W_CacheLumpName("M_EPISOD", PU_CACHE));
 }
 
 void M_VerifyNightmare(int key)
@@ -783,17 +760,16 @@ static char *msgNames[2] = {"M_MSGOFF", "M_MSGON"};
 
 void M_DrawOptions(void)
 {
-    if (!detached_ui) {
-        V_DrawPatchDirect(108, 15, W_CacheLumpName("M_OPTTTL", PU_CACHE));
+    if (detached_ui)
+        return;
 
-        V_DrawPatchDirect(OptionsDef.x + 175,
-                          OptionsDef.y + LINEHEIGHT * detail,
-                          W_CacheLumpName(detailNames[detailLevel], PU_CACHE));
+    V_DrawPatchDirect(108, 15, W_CacheLumpName("M_OPTTTL", PU_CACHE));
 
-        V_DrawPatchDirect(OptionsDef.x + 120,
-                          OptionsDef.y + LINEHEIGHT * messages,
-                          W_CacheLumpName(msgNames[showMessages], PU_CACHE));
-    }
+    V_DrawPatchDirect(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * detail,
+                      W_CacheLumpName(detailNames[detailLevel], PU_CACHE));
+
+    V_DrawPatchDirect(OptionsDef.x + 120, OptionsDef.y + LINEHEIGHT * messages,
+                      W_CacheLumpName(msgNames[showMessages], PU_CACHE));
 
     M_DrawThermo(OptionsDef.x, OptionsDef.y + LINEHEIGHT * (mousesens + 1), 10,
                  mouseSensitivity);
@@ -1641,6 +1617,30 @@ void M_Drawer(void)
 
     if (detached_ui) {
         DG_DrawDetachedUI(DUI_MENU);
+
+        duimenutype_t type;
+        if (currentMenu == &MainDef)
+            type = DMENU_MAIN;
+        else if (currentMenu == &EpiDef)
+            type = DMENU_EPISODE;
+        else if (currentMenu == &NewDef)
+            type = DMENU_NEW_GAME;
+        else if (currentMenu == &OptionsDef)
+            type = DMENU_OPTIONS;
+        else if (currentMenu == &ReadDef1)
+            type = DMENU_README1;
+        else if (currentMenu == &ReadDef2)
+            type = DMENU_README2;
+        else if (currentMenu == &SoundDef)
+            type = DMENU_SOUND;
+        else if (currentMenu == &LoadDef)
+            type = DMENU_LOAD_GAME;
+        else if (currentMenu == &SaveDef)
+            type = DMENU_SAVE_GAME;
+        else
+            abort();
+
+        DG_DrawMenu(type, currentMenu, itemOn);
         return;
     }
 

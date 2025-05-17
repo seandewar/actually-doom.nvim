@@ -68,6 +68,9 @@ enum {
     // AMSG_AUTOMAP_TITLE, title: string
     AMSG_AUTOMAP_TITLE = 7,
 
+    // AMSG_FRAME_MENU, type: u8, lumps: string[], selected_i: u8
+    AMSG_FRAME_MENU = 8,
+
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
 
@@ -943,6 +946,27 @@ void DG_DrawDetachedUI(duitype_t ui)
 {
     assert(ui < CHAR_BIT);
     enabled_dui_types |= 1 << ui;
+}
+
+void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FRAME_MENU);
+
+        // TODO: unsigned vs signed; will this trick work??
+        assert((uint8_t)type == type);
+        Comm_Write8(type);
+
+        // TODO: unsigned vs signed; will this trick work??
+        assert((uint16_t)menu->numitems == menu->numitems);
+        Comm_Write16(menu->numitems);
+        for (int i = 0; i < menu->numitems; i++)
+            Comm_WriteString(menu->menuitems[i].name);
+
+        // TODO: unsigned vs signed; will this trick work??
+        assert((uint8_t)selected_i == selected_i);
+        Comm_Write8(selected_i);
+    });
 }
 
 void DG_OnGameMessage(const char *prefix, const char *msg)

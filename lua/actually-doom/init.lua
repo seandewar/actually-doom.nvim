@@ -289,7 +289,7 @@ do
       alt = keycode:find("M-", 1, true) ~= nil
       key = keycode:match ".*[-<](.+)>" or keycode
       if #key == 1 and printable(key:byte()) then
-        doomkey, _ = lower(key:byte()) -- Shift was set from keycode modifiers.
+        doomkey = lower(key:byte()) -- Shift was set from keycode modifiers.
       else
         key = vim.keycode(("<%s>"):format(key))
         doomkey = special_to_doomkey[key]
@@ -521,6 +521,7 @@ local function recv_msg_loop(doom, buf)
             bit.band(enabled_dui_bits, 2) ~= 0,
             bit.band(enabled_dui_bits, 4) ~= 0,
             bit.band(enabled_dui_bits, 8) ~= 0,
+            bit.band(enabled_dui_bits, 16) ~= 0,
             bit.band(enabled_dui_bits, 32) ~= 0
           )
         end)
@@ -598,6 +599,25 @@ local function recv_msg_loop(doom, buf)
         ('AMSG_AUTOMAP_TITLE: title="%s"\n'):format(doom.automap_title),
         "Debug"
       )
+    end,
+
+    -- AMSG_FRAME_MENU
+    [8] = function()
+      local type = read_u8()
+      local lumps = {}
+      for i = 1, read_u16() do
+        lumps[i] = read_string()
+      end
+      local selected_i = read_u8() + 1 -- Adjust to 1-indexed.
+
+      local cell_gfx = doom.screen:cell_gfx()
+      if cell_gfx then
+        cell_gfx.menu = {
+          type = type,
+          lumps = lumps,
+          selected_i = selected_i,
+        }
+      end
     end,
 
     -- AMSG_FRAME_SHM_READY

@@ -13,8 +13,27 @@ do
   end
 end
 
+--- @enum MenuType
+local MenuType = {
+  MAIN = 0,
+  EPISODE = 1,
+  NEW_GAME = 2,
+  OPTIONS = 3,
+  README1 = 4,
+  README2 = 5,
+  SOUND = 6,
+  LOAD_GAME = 7,
+  SAVE_GAME = 8,
+}
+
+--- @class (exact) Menu
+--- @field type MenuType
+--- @field lumps string[]
+--- @field selected_i integer
+
 --- @class (exact) CellGfx: Gfx
 --- @field screen Screen
+--- @field menu Menu?
 --- @field clear_hl_tables_ticker integer
 ---
 --- @field new function
@@ -117,6 +136,51 @@ local function rgb_to_xterm256(r, g, b)
   return colour
 end
 
+local menu_lump_to_label = {
+  -- MainMenu
+  M_NGAME = "New Game",
+  M_OPTION = "Options",
+  M_LOADG = "Load Game",
+  M_SAVEG = "Save Game",
+  M_RDTHIS = "Read This!",
+  M_QUITG = "Quit Game",
+
+  -- EpisodeMenu
+  -- TODO: these very much depend on the WAD
+  M_EPI1 = "Knee-Deep in the Dead",
+  M_EPI2 = "The Shores of Hell",
+  M_EPI3 = "Inferno",
+  M_EPI4 = "Thy Flesh Consumed",
+
+  -- NewGameMenu
+  M_JKILL = "I'm too young to die.",
+  M_ROUGH = "Hey, not too rough.",
+  M_HURT = "Hurt me plenty.",
+  M_ULTRA = "Ultra-Violence.",
+  M_NMARE = "Nightmare!",
+
+  -- OptionsMenu
+  M_ENDGAM = "End Game",
+  M_MESSG = "Messages:",
+  M_DETAIL = "Graphic Detail:",
+  M_SCRNSZ = "Screen Size",
+  M_MSENS = "Mouse Sensitivity",
+  M_SVOL = "Sound Volume",
+
+  -- SoundMenu
+  M_SFXVOL = "Sfx Volume",
+  M_MUSVOL = "Music Volume",
+}
+
+local menu_type_to_header_lines = {
+  [MenuType.NEW_GAME] = "NEW GAME\n\nChoose Skill Level:",
+  [MenuType.EPISODE] = "NEW GAME\n\nWhich Episode?",
+  [MenuType.LOAD_GAME] = "LOAD GAME",
+  [MenuType.SAVE_GAME] = "SAVE GAME",
+  [MenuType.OPTIONS] = "OPTIONS",
+  [MenuType.SOUND] = "OPTIONS\n\nSound Volume:",
+}
+
 local right_arms_keys_cols = #" 234567     XXX "
 local right_ammo_cols = #" Bull XXX / XXX "
 
@@ -125,14 +189,16 @@ local right_ammo_cols = #" Bull XXX / XXX "
 --- @param draw_menu_msgs boolean?
 --- @param draw_automap_title boolean?
 --- @param draw_status_bar boolean?
---- @param draw_paused boolean?
+--- @param draw_menu boolean?
+--- @param draw_pause boolean?
 function M:refresh(
   pixels,
   draw_game_msgs,
   draw_menu_msgs,
   draw_automap_title,
   draw_status_bar,
-  draw_paused
+  draw_menu,
+  draw_pause
 )
   if not self.screen.term_chan then
     return
@@ -159,7 +225,7 @@ function M:refresh(
 
   self.screen:update_term_size()
   local scratch_buf = require("actually-doom.ui").scratch_buf:reset()
-  -- Reset attributes, clear screen, clear scrollback, cursor to 0,0.
+  -- Reset attributes, clear screen, clear scrollback, cursor to 1,1.
   scratch_buf:put "\27[m\27[2J\27[3J\27[H"
 
   local prev_colour
@@ -207,7 +273,8 @@ function M:refresh(
     end
   end
 
-  local player_status = self.screen.doom.player_status
+  local doom = self.screen.doom
+  local player_status = doom.player_status
   if draw_status_bar and player_status then
     -- Set background colour to xterm #3a3a3a.
     scratch_buf:put "\27[48;5;237m"
@@ -312,32 +379,78 @@ function M:refresh(
     )
   end
 
-  local did_set_msg_attrs = false
+  --- @param len integer
+  --- @param max_len integer
+  local function center(len, max_len)
+    return math.max(1, math.floor((max_len - len) / 2) + 1)
+  end
+
   --- @param msg string
-  local function write_msg(msg, row, col)
-    -- Set background colour to xterm pure black, foreground colour to xterm
-    -- pure red.
-    if not did_set_msg_attrs then
-      scratch_buf:put "\27[48;5;16m\27[38;5;196m"
-      did_set_msg_attrs = true
+  --- @param start_row integer? If nil, vertically center to terminal height.
+  local function write_multiline_centered(msg, start_row)
+    local lines = vim.split(msg, "\n", { plain = true })
+    start_row = start_row or center(#lines, self.screen.term_height)
+    scratch_buf:put("\27[", start_row, "H")
+
+    for _, line in ipairs(lines) do
+      if line ~= "" then
+        local col = center(#line, self.screen.term_width)
+        scratch_buf:put("\27[", col, "G", line)
+      end
+      scratch_buf:put "\n"
     end
-    scratch_buf:put("\27[", row, ";", col, "H", msg)
   end
 
   if
     draw_automap_title
-    and self.screen.term_height > 3 -- Drawn above left side of player status.
+    or draw_game_msgs
+    or draw_menu
+    or draw_menu_msgs
+    or draw_pause
   then
-    write_msg(self.screen.doom.automap_title, self.screen.term_height - 3, 1)
+    -- Set background colour to xterm pure black, foreground to xterm pure red.
+    scratch_buf:put "\27[48;5;16m\27[38;5;196m"
+  end
+  if draw_automap_title then
+    local row = math.max(1, self.screen.term_height - 3)
+    scratch_buf:put("\27[", row, "H", doom.automap_title)
   end
   if draw_game_msgs then
-    write_msg(self.screen.doom.game_msg, 1, 1)
+    scratch_buf:put("\27[H", doom.game_msg)
+  end
+  if draw_menu then
+    local labels = {}
+    local max_label_len = 0
+    for i, lump in ipairs(self.menu.lumps) do
+      labels[i] = menu_lump_to_label[lump] or lump
+      max_label_len = math.max(max_label_len, #labels[i])
+    end
+
+    local start_row = center(#self.menu.lumps, self.screen.term_height)
+    local header = menu_type_to_header_lines[self.menu.type]
+    if header then
+      local line_count = 1 + select(2, header:gsub("\n", ""))
+      write_multiline_centered(header, math.max(1, start_row - line_count - 1))
+    end
+    scratch_buf:put("\27[", start_row, "H")
+
+    local col = center(max_label_len, self.screen.term_width)
+    for i, label in ipairs(labels) do
+      if label ~= "" then
+        if i == self.menu.selected_i then
+          scratch_buf:put("\27[", math.max(1, col - 4), "G💀 ")
+        end
+        scratch_buf:put("\27[", col, "G", label)
+      end
+      scratch_buf:put "\n"
+    end
   end
   if draw_menu_msgs then
-    write_msg(self.screen.doom.menu_msg, 1, 1) -- TODO: center properly; multiline
+    write_multiline_centered(doom.menu_msg)
   end
-  if draw_paused then
-    write_msg("Pause", 3, math.floor((self.screen.term_width + 5) / 2))
+  if draw_pause then
+    local label = "Pause"
+    scratch_buf:put("\27[;", center(#label, self.screen.term_width), "H", label)
   end
 
   -- When using RGB, it's possible for Nvim to run out of free highlight

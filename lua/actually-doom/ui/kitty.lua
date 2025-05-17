@@ -331,7 +331,7 @@ local diacritics = {
 local function setup_term_buf(kitty)
   local scratch_buf = require("actually-doom.ui").scratch_buf:reset()
   scratch_buf:put(
-    -- Reset attributes, clear screen, clear scrollback, cursor to 0,0.
+    -- Reset attributes, clear screen, clear scrollback, cursor to 1,1.
     "\27[m\27[2J\27[3J\27[H",
     -- Set foreground colour to least significant 8 bits of image ID. "True"
     -- colour terminals may use 24 bits via RGB, but &termguicolors may be off.

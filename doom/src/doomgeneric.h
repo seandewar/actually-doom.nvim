@@ -5,6 +5,7 @@
 
 #include "doomtype.h"
 #include "i_video.h"
+#include "m_menu.h"
 
 #define DOOMGENERIC_SCREEN_BUF_SIZE (SCREENWIDTH * SCREENHEIGHT * 3)
 
@@ -37,6 +38,18 @@ typedef enum {
     DUI_PAUSED = 5,
 } duitype_t;
 
+typedef enum {
+    DMENU_MAIN = 0,
+    DMENU_EPISODE = 1,
+    DMENU_NEW_GAME = 2,
+    DMENU_OPTIONS = 3,
+    DMENU_README1 = 4,
+    DMENU_README2 = 5,
+    DMENU_SOUND = 6,
+    DMENU_LOAD_GAME = 7,
+    DMENU_SAVE_GAME = 8,
+} duimenutype_t;
+
 void DG_Init(void);
 void DG_WipeTick(void);
 void DG_OnGameMessage(const char *prefix, const char *msg);
@@ -44,6 +57,7 @@ void DG_OnMenuMessage(const char *msg);
 void DG_OnSetAutomapTitle(const char *title);
 void DG_DrawFrame(void);
 void DG_DrawDetachedUI(duitype_t ui);
+void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i);
 void DG_SleepMs(uint32_t ms);
 uint32_t DG_GetTicksMs(void);
 boolean DG_GetInput(input_t *input);
