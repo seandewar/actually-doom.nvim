@@ -18,12 +18,14 @@
 
 #include <stdio.h>
 
+#include "doomgeneric.h"
 #include "doomstat.h"
 #include "g_game.h"
 #include "i_swap.h"
 #include "i_video.h"
 #include "m_misc.h"
 #include "m_random.h"
+#include "r_main.h"
 #include "s_sound.h"
 #include "sounds.h"
 #include "w_wad.h"
@@ -397,6 +399,9 @@ void WI_drawLF(void)
 // Draws "Entering <LevelName>"
 void WI_drawEL(void)
 {
+    if (detached_ui)
+        return;
+
     int y = WI_TITLEY;
 
     // draw "Entering"
@@ -698,7 +703,7 @@ void WI_drawShowNextLoc(void)
             WI_drawOnLnode(8, splat);
 
         // draw flashing ptr
-        if (snl_pointeron)
+        if (!detached_ui && snl_pointeron)
             WI_drawOnLnode(wbs->next, yah);
     }
 
@@ -1224,15 +1229,18 @@ void WI_updateStats(void)
 
 void WI_drawStats(void)
 {
-    // line height
-    int lh;
-
-    lh = (3 * SHORT(num[0]->height)) / 2;
-
     WI_slamBackground();
 
     // draw animated background
     WI_drawAnimatedBack();
+
+    if (detached_ui)
+        return;
+
+    // line height
+    int lh;
+
+    lh = (3 * SHORT(num[0]->height)) / 2;
 
     WI_drawLF();
 
@@ -1514,6 +1522,16 @@ void WI_Drawer(void)
     case NoState:
         WI_drawNoState();
         break;
+    }
+
+    if (detached_ui) {
+        DG_DrawIntermission(state, state == StatCount ? &(duiwistats_t){
+                                       .kills = cnt_kills[consoleplayer],
+                                       .items = cnt_items[consoleplayer],
+                                       .secret = cnt_secret[consoleplayer],
+                                       .time = cnt_time,
+                                       .par = cnt_par,
+                                   } : NULL);
     }
 }
 

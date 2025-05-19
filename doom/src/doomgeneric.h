@@ -6,6 +6,8 @@
 #include "doomtype.h"
 #include "i_video.h"
 #include "m_menu.h"
+#include "p_saveg.h"
+#include "wi_stuff.h"
 
 #define DOOMGENERIC_SCREEN_BUF_SIZE (SCREENWIDTH * SCREENHEIGHT * 3)
 
@@ -28,14 +30,13 @@ typedef struct {
     byte value;
 } input_t;
 
-// TODO: finale, level end text
+// TODO: finale
 typedef enum {
     DUI_GAME_MESSAGE = 0,
     DUI_MENU_MESSAGE = 1,
     DUI_AUTOMAP_TITLE = 2,
     DUI_STATUSBAR = 3,
-    DUI_MENU = 4,
-    DUI_PAUSED = 5,
+    DUI_PAUSED = 4,
 } duitype_t;
 
 typedef enum {
@@ -50,6 +51,35 @@ typedef enum {
     DMENU_SAVE_GAME = 8,
 } duimenutype_t;
 
+typedef union {
+    struct {
+        int save_slot_count;
+        const char (*save_slots)[SAVESTRINGSIZE];
+        // -1 if not editing a slot string.
+        int save_slot_edit_i;
+    } load_or_save_game;
+
+    struct {
+        boolean low_detail;
+        boolean messages_on;
+        int mouse_sensitivity;
+        int screen_size;
+    } options;
+
+    struct {
+        int sfx_volume;
+        int music_volume;
+    } sound;
+} duimenuvars_t;
+
+typedef struct {
+    int kills;
+    int items;
+    int secret;
+    int time;
+    int par;
+} duiwistats_t;
+
 void DG_Init(void);
 void DG_WipeTick(void);
 void DG_OnGameMessage(const char *prefix, const char *msg);
@@ -57,7 +87,11 @@ void DG_OnMenuMessage(const char *msg);
 void DG_OnSetAutomapTitle(const char *title);
 void DG_DrawFrame(void);
 void DG_DrawDetachedUI(duitype_t ui);
-void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i);
+// "vars" may be in temporary storage!
+void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i,
+                 const duimenuvars_t *vars);
+// "stats" may be in temporary storage!
+void DG_DrawIntermission(stateenum_t state, const duiwistats_t *stats);
 void DG_SleepMs(uint32_t ms);
 uint32_t DG_GetTicksMs(void);
 boolean DG_GetInput(input_t *input);

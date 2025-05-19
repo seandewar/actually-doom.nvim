@@ -68,8 +68,27 @@ enum {
     // AMSG_AUTOMAP_TITLE, title: string
     AMSG_AUTOMAP_TITLE = 7,
 
-    // AMSG_FRAME_MENU, type: u8, lumps: string[], selected_i: u8
+    // AMSG_FRAME_MENU, type: u8, item_lumps: string[], selected_i: u8
+    //   if type == DMENU_OPTIONS:
+    //      toggle_bits: u8 (bit 0: low_detail, 1: messages_on)
+    //      mouse_sensitivity: i8,
+    //      screen_size: i8,
+    //   else if type == DMENU_SOUND:
+    //      sfx_volume: i8,
+    //      music_volume: i8,
+    //   else if type == DMENU_LOAD_GAME or DMENU_SAVE_GAME:
+    //      save_slots: string[],
+    //      save_slot_edit_i: i8,
     AMSG_FRAME_MENU = 8,
+
+    // AMSG_FRAME_INTERMISSION, state: i8 (see stateenum_t)
+    //   if state == StatCount:
+    //      kills_percent: i32,
+    //      items_percent: i32,
+    //      secret_percent: i32,
+    //      time_total_secs: i32,
+    //      par_total_secs: i32,
+    AMSG_FRAME_INTERMISSION = 9,
 
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
@@ -948,7 +967,8 @@ void DG_DrawDetachedUI(duitype_t ui)
     enabled_dui_types |= 1 << ui;
 }
 
-void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i)
+void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i,
+                 const duimenuvars_t *vars)
 {
     COMM_WRITE_MSG({
         Comm_Write8(AMSG_FRAME_MENU);
@@ -966,6 +986,77 @@ void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i)
         // TODO: unsigned vs signed; will this trick work??
         assert((uint8_t)selected_i == selected_i);
         Comm_Write8(selected_i);
+
+        switch (type) {
+        case DMENU_OPTIONS: {
+            byte toggle_bits = 0;
+            toggle_bits |= vars->options.low_detail;
+            toggle_bits |= vars->options.messages_on << 1;
+            Comm_Write8(toggle_bits);
+
+            assert((int8_t)vars->options.mouse_sensitivity
+                   == vars->options.mouse_sensitivity);
+            Comm_Write8(vars->options.mouse_sensitivity);
+
+            assert((int8_t)vars->options.screen_size
+                   == vars->options.screen_size);
+            Comm_Write8(vars->options.screen_size);
+        } break;
+
+        case DMENU_SOUND:
+            assert((int8_t)vars->sound.sfx_volume == vars->sound.sfx_volume);
+            Comm_Write8(vars->sound.sfx_volume);
+
+            assert((int8_t)vars->sound.music_volume
+                   == vars->sound.music_volume);
+            Comm_Write8(vars->sound.music_volume);
+            break;
+
+        case DMENU_LOAD_GAME:
+        case DMENU_SAVE_GAME:
+            // TODO: unsigned vs signed; will this trick work??
+            assert((uint16_t)vars->load_or_save_game.save_slot_count
+                   == vars->load_or_save_game.save_slot_count);
+            Comm_Write16(vars->load_or_save_game.save_slot_count);
+
+            for (int i = 0; i < vars->load_or_save_game.save_slot_count; ++i)
+                Comm_WriteString(vars->load_or_save_game.save_slots[i]);
+
+            assert((int8_t)vars->load_or_save_game.save_slot_edit_i
+                   == vars->load_or_save_game.save_slot_edit_i);
+            Comm_Write8(vars->load_or_save_game.save_slot_edit_i);
+            break;
+
+        default:
+            assert(!vars);
+        }
+    });
+}
+
+void DG_DrawIntermission(stateenum_t state, const duiwistats_t *stats)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FRAME_INTERMISSION);
+
+        assert((int8_t)state == state);
+        Comm_Write8(state);
+
+        if (stats) {
+            assert((int32_t)stats->kills == stats->kills);
+            Comm_Write32(stats->kills);
+
+            assert((int32_t)stats->items == stats->items);
+            Comm_Write32(stats->items);
+
+            assert((int32_t)stats->secret == stats->secret);
+            Comm_Write32(stats->secret);
+
+            assert((int32_t)stats->time == stats->time);
+            Comm_Write32(stats->time);
+
+            assert((int32_t)stats->par == stats->par);
+            Comm_Write32(stats->par);
+        }
     });
 }
 

@@ -287,7 +287,7 @@ void HU_Ticker(void)
                             HUlib_addMessageToSText(&w_message, player_names[i],
                                                     w_inputbuffer[i].l.l);
                             DG_OnGameMessage(player_names[i],
-                                                  w_inputbuffer[i].l.l);
+                                             w_inputbuffer[i].l.l);
                             message_nottobefuckedwith = true;
                             message_on = true;
                             message_counter = HU_MSGTIMEOUT;

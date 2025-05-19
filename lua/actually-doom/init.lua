@@ -6,35 +6,24 @@ local log = vim.log
 local uv = vim.uv
 
 local M = {
-  -- Corresponds to the DOOM key codes defined in doomkeys.h.
-  -- Non-exhaustive; contains those only referenced by us.
-  key = {
-    use = 162,
-    fire = 163,
-    leftarrow = 172,
-    uparrow = 173,
-    rightarrow = 174,
-    downarrow = 175,
-    rshift = 182,
-    ralt = 184,
-    f1 = 187,
-    f2 = 188,
-    f3 = 189,
-    f4 = 190,
-    f5 = 191,
-    f6 = 192,
-    f7 = 193,
-    f8 = 194,
-    f9 = 195,
-    f10 = 196,
-    f11 = 215,
-    f12 = 216,
-    home = 199,
-    ["end"] = 207,
-    pgup = 201,
-    pgdn = 209,
-    ins = 210,
-    del = 211,
+  --- @enum MenuType
+  menu_type = {
+    MAIN = 0,
+    EPISODE = 1,
+    NEW_GAME = 2,
+    OPTIONS = 3,
+    README1 = 4,
+    README2 = 5,
+    SOUND = 6,
+    LOAD_GAME = 7,
+    SAVE_GAME = 8,
+  },
+
+  --- @enum IntermissionState
+  intermission_state = {
+    NONE = -1,
+    STAT_COUNT = 0,
+    SHOW_NEXT_LOC = 1,
   },
 }
 
@@ -114,6 +103,39 @@ function Doom:send_set_config_var(name, value)
   put_string(self.send_buf, value)
 end
 
+-- Corresponds to the DOOM key codes defined in doomkeys.h.
+-- Non-exhaustive; contains those only referenced by us.
+--- @enum DoomKey
+local doomkey = {
+  BACKSPACE = 127,
+  USE = 162,
+  FIRE = 163,
+  LEFTARROW = 172,
+  UPARROW = 173,
+  RIGHTARROW = 174,
+  DOWNARROW = 175,
+  RSHIFT = 182,
+  RALT = 184,
+  F1 = 187,
+  F2 = 188,
+  F3 = 189,
+  F4 = 190,
+  F5 = 191,
+  F6 = 192,
+  F7 = 193,
+  F8 = 194,
+  F9 = 195,
+  F10 = 196,
+  F11 = 215,
+  F12 = 216,
+  HOME = 199,
+  END = 207,
+  PGUP = 201,
+  PGDN = 209,
+  INS = 210,
+  DEL = 211,
+}
+
 --- Schedules a check to happen in approximately `ms` milliseconds from now.
 --- If a check is already scheduled, reschedule it if `ms` is sooner.
 --- @param ms integer? If nil, schedule for the next event loop iteration.
@@ -149,11 +171,11 @@ function Doom:schedule_check(ms)
   end
 end
 
---- @param doomkey integer
+--- @param dkey integer
 --- @param pressed boolean
-function Doom:send_key(doomkey, pressed)
+function Doom:send_key(dkey, pressed)
   -- CMSG_PRESS_KEY
-  self.send_buf:put("\1", string.char(doomkey), pressed and "\1" or "\0")
+  self.send_buf:put("\1", string.char(dkey), pressed and "\1" or "\0")
 end
 
 function Doom:send_mouse_buttons()
@@ -169,10 +191,10 @@ function Doom:press_key(info)
     self:send_key(self.pressed_key.key, false)
 
     if self.pressed_key.shift and not (info or {}).shift then
-      self:send_key(M.key.rshift, false)
+      self:send_key(doomkey.RSHIFT, false)
     end
     if self.pressed_key.alt and not (info or {}).alt then
-      self:send_key(M.key.ralt, false)
+      self:send_key(doomkey.RALT, false)
     end
   end
 
@@ -182,41 +204,42 @@ function Doom:press_key(info)
     self:send_key(info.key, true)
 
     if info.shift and not (self.pressed_key or {}).shift then
-      self:send_key(M.key.rshift, true)
+      self:send_key(doomkey.RSHIFT, true)
     end
     if info.alt and not (self.pressed_key or {}).alt then
-      self:send_key(M.key.ralt, true)
+      self:send_key(doomkey.RALT, true)
     end
   end
   self.pressed_key = info
 end
 
 do
+  --- @type table<string, DoomKey>
   local special_to_doomkey = {
-    [vim.keycode "<BS>"] = M.key.backspace,
-    [vim.keycode "<Space>"] = M.key.use,
-    [vim.keycode "<Left>"] = M.key.leftarrow,
-    [vim.keycode "<Up>"] = M.key.uparrow,
-    [vim.keycode "<Right>"] = M.key.rightarrow,
-    [vim.keycode "<Down>"] = M.key.downarrow,
-    [vim.keycode "<F1>"] = M.key.f1,
-    [vim.keycode "<F2>"] = M.key.f2,
-    [vim.keycode "<F3>"] = M.key.f3,
-    [vim.keycode "<F4>"] = M.key.f4,
-    [vim.keycode "<F5>"] = M.key.f5,
-    [vim.keycode "<F6>"] = M.key.f6,
-    [vim.keycode "<F7>"] = M.key.f7,
-    [vim.keycode "<F8>"] = M.key.f8,
-    [vim.keycode "<F9>"] = M.key.f9,
-    [vim.keycode "<F10>"] = M.key.f10,
-    [vim.keycode "<F11>"] = M.key.f11,
-    [vim.keycode "<F12>"] = M.key.f12,
-    [vim.keycode "<Home>"] = M.key.home,
-    [vim.keycode "<End>"] = M.key["end"],
-    [vim.keycode "<PageUp>"] = M.key.pgup,
-    [vim.keycode "<PageDown>"] = M.key.pgdn,
-    [vim.keycode "<Insert>"] = M.key.ins,
-    [vim.keycode "<Del>"] = M.key.del,
+    [vim.keycode "<BS>"] = doomkey.BACKSPACE,
+    [vim.keycode "<Space>"] = doomkey.USE,
+    [vim.keycode "<Left>"] = doomkey.LEFTARROW,
+    [vim.keycode "<Up>"] = doomkey.UPARROW,
+    [vim.keycode "<Right>"] = doomkey.RIGHTARROW,
+    [vim.keycode "<Down>"] = doomkey.DOWNARROW,
+    [vim.keycode "<F1>"] = doomkey.F1,
+    [vim.keycode "<F2>"] = doomkey.F2,
+    [vim.keycode "<F3>"] = doomkey.F3,
+    [vim.keycode "<F4>"] = doomkey.F4,
+    [vim.keycode "<F5>"] = doomkey.F5,
+    [vim.keycode "<F6>"] = doomkey.F6,
+    [vim.keycode "<F7>"] = doomkey.F7,
+    [vim.keycode "<F8>"] = doomkey.F8,
+    [vim.keycode "<F9>"] = doomkey.F9,
+    [vim.keycode "<F10>"] = doomkey.F10,
+    [vim.keycode "<F11>"] = doomkey.F11,
+    [vim.keycode "<F12>"] = doomkey.F12,
+    [vim.keycode "<Home>"] = doomkey.HOME,
+    [vim.keycode "<End>"] = doomkey.END,
+    [vim.keycode "<PageUp>"] = doomkey.PGUP,
+    [vim.keycode "<PageDown>"] = doomkey.PGDN,
+    [vim.keycode "<Insert>"] = doomkey.INS,
+    [vim.keycode "<Del>"] = doomkey.DEL,
   }
 
   --- @param key integer
@@ -276,11 +299,11 @@ do
     -- (it was just used for firing), so not bothering to consider it.
     local shift = false
     local alt = false
-    local doomkey
+    local dkey
     -- Until https://github.com/neovim/neovim/issues/26575 is implemented, we
     -- need to parse keycodes ourselves.
     if #keycode == 1 then
-      doomkey, shift = lower(key:byte())
+      dkey, shift = lower(key:byte())
     else
       -- Easiest to parse these using the printable representation via keytrans;
       -- it should return modifiers in uppercase, with "M" being used for Alt
@@ -289,29 +312,29 @@ do
       alt = keycode:find("M-", 1, true) ~= nil
       key = keycode:match ".*[-<](.+)>" or keycode
       if #key == 1 and printable(key:byte()) then
-        doomkey = lower(key:byte()) -- Shift was set from keycode modifiers.
+        dkey = lower(key:byte()) -- Shift was set from keycode modifiers.
       else
         key = vim.keycode(("<%s>"):format(key))
-        doomkey = special_to_doomkey[key]
-        if not doomkey and #key == 1 then
-          doomkey = key:byte()
+        dkey = special_to_doomkey[key]
+        if not dkey and #key == 1 then
+          dkey = key:byte()
         end
       end
     end
-    if not doomkey then
+    if not dkey then
       return
     end
 
     if
       self.pressed_key
-      and doomkey >= M.key.leftarrow
+      and dkey >= doomkey.LEFTARROW
       and self.pressed_key.shift == shift
       and self.pressed_key.alt == alt
     then
       -- If the arrow key in the opposite direction was active, just cancel it.
       -- This allows for more precise movement in the terminal.
-      local opposite_arrow_doomkey = bit.band(doomkey - M.key.leftarrow + 2, 3)
-        + M.key.leftarrow
+      local opposite_arrow_doomkey = bit.band(dkey - doomkey.LEFTARROW + 2, 3)
+        + doomkey.LEFTARROW
       if self.pressed_key.key == opposite_arrow_doomkey then
         self:press_key(nil)
         self:schedule_check()
@@ -320,7 +343,7 @@ do
     end
 
     self:press_key {
-      key = doomkey,
+      key = dkey,
       shift = shift,
       alt = alt,
       release_time = uv.now() + 350,
@@ -447,6 +470,10 @@ local function recv_msg_loop(doom, buf)
     return read_bytes(1):byte()
   end
   --- @return integer
+  local function read_i8()
+    return bit.arshift(bit.lshift(read_u8(), 8), 8) -- Sign extendo!
+  end
+  --- @return integer
   local function read_u16()
     local a, b = read_bytes(2):byte(1, 2)
     return bit.bor(a, bit.lshift(b, 8))
@@ -459,6 +486,10 @@ local function recv_msg_loop(doom, buf)
   local function read_u32()
     local a, b, c, d = read_bytes(4):byte(1, 4)
     return bit.bor(a, bit.lshift(b, 8), bit.lshift(c, 16), bit.lshift(d, 24))
+  end
+  --- @return integer
+  local function read_i32()
+    return bit.arshift(bit.lshift(read_u32(), 32), 32) -- Sign extendo!
   end
   --- @return string
   local function read_string()
@@ -499,6 +530,11 @@ local function recv_msg_loop(doom, buf)
   end
   doom:schedule_check()
 
+  -- TODO: merge AMSG_FRAME_DRAW_MENU with AMSG_FRAME so we don't need this.
+  --       same for intermission crap
+  local menu --- @type Menu?
+  local intermission --- @type Intermission?
+
   --- @type table<integer, fun(): boolean?>
   local msg_handlers = {
     -- AMSG_FRAME
@@ -517,15 +553,20 @@ local function recv_msg_loop(doom, buf)
         vim.schedule(function()
           cell_gfx:refresh(
             pixels,
+            menu,
+            intermission,
             bit.band(enabled_dui_bits, 1) ~= 0,
             bit.band(enabled_dui_bits, 2) ~= 0,
             bit.band(enabled_dui_bits, 4) ~= 0,
             bit.band(enabled_dui_bits, 8) ~= 0,
-            bit.band(enabled_dui_bits, 16) ~= 0,
-            bit.band(enabled_dui_bits, 32) ~= 0
+            bit.band(enabled_dui_bits, 16) ~= 0
           )
+          -- TODO: hack
+          menu = nil
+          intermission = nil
         end)
       end
+
       if doom.screen.visible then
         doom:send_frame_request()
         doom:schedule_check()
@@ -610,12 +651,73 @@ local function recv_msg_loop(doom, buf)
       end
       local selected_i = read_u8() + 1 -- Adjust to 1-indexed.
 
+      local vars
+      if type == M.menu_type.LOAD_GAME or type == M.menu_type.SAVE_GAME then
+        local save_slots = {}
+        for i = 1, read_u16() do
+          save_slots[i] = read_string()
+        end
+        local save_slot_edit_i = read_i8() + 1 -- Adjust to 1-indexed.
+
+        vars = {
+          save_slots = save_slots,
+          save_slot_edit_i = save_slot_edit_i > 0 and save_slot_edit_i or nil,
+        } --[[@as LoadOrSaveGameMenuVars]]
+      elseif type == M.menu_type.OPTIONS then
+        local toggle_bits = read_u8()
+        local mouse_sensitivity = read_i8()
+        local screen_size = read_i8()
+
+        vars = {
+          low_detail = bit.band(toggle_bits, 1) ~= 0,
+          messages_on = bit.band(toggle_bits, 2) ~= 0,
+          mouse_sensitivity = mouse_sensitivity,
+          screen_size = screen_size,
+        } --[[@as OptionsMenuVars]]
+      elseif type == M.menu_type.SOUND then
+        vars = {
+          sfx_volume = read_i8(),
+          music_volume = read_i8(),
+        } --[[@as SoundMenuVars]]
+      end
+
       local cell_gfx = doom.screen:cell_gfx()
       if cell_gfx then
-        cell_gfx.menu = {
+        menu = {
           type = type,
           lumps = lumps,
           selected_i = selected_i,
+          vars = vars,
+        }
+      end
+    end,
+
+    -- AMSG_FRAME_INTERMISSION
+    [9] = function()
+      local state = read_i8()
+
+      local kills = -1
+      local items = -1
+      local secret = -1
+      local time = -1
+      local par = -1
+      if state == M.intermission_state.STAT_COUNT then
+        kills = read_i32()
+        items = read_i32()
+        secret = read_i32()
+        time = read_i32()
+        par = read_i32()
+      end
+
+      local cell_gfx = doom.screen:cell_gfx()
+      if cell_gfx then
+        intermission = {
+          state = state,
+          kills = kills >= 0 and kills or nil,
+          items = items >= 0 and items or nil,
+          secret = secret >= 0 and secret or nil,
+          time = time >= 0 and time or nil,
+          par = par >= 0 and par or nil,
         }
       end
     end,

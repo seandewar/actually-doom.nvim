@@ -13,27 +13,36 @@ do
   end
 end
 
---- @enum MenuType
-local MenuType = {
-  MAIN = 0,
-  EPISODE = 1,
-  NEW_GAME = 2,
-  OPTIONS = 3,
-  README1 = 4,
-  README2 = 5,
-  SOUND = 6,
-  LOAD_GAME = 7,
-  SAVE_GAME = 8,
-}
+--- @class (exact) LoadOrSaveGameMenuVars
+--- @field save_slots string[]
+--- @field save_slot_edit_i integer?
+
+--- @class (exact) OptionsMenuVars
+--- @field low_detail boolean
+--- @field messages_on boolean
+--- @field mouse_sensitivity integer
+--- @field screen_size integer
+
+--- @class (exact) SoundMenuVars
+--- @field sfx_volume integer
+--- @field music_volume integer
 
 --- @class (exact) Menu
 --- @field type MenuType
 --- @field lumps string[]
 --- @field selected_i integer
+--- @field vars LoadOrSaveGameMenuVars|OptionsMenuVars|SoundMenuVars|nil
+
+--- @class (exact) Intermission
+--- @field state IntermissionState
+--- @field kills integer?
+--- @field items integer?
+--- @field secret integer?
+--- @field time integer?
+--- @field par integer?
 
 --- @class (exact) CellGfx: Gfx
 --- @field screen Screen
---- @field menu Menu?
 --- @field clear_hl_tables_ticker integer
 ---
 --- @field new function
@@ -94,8 +103,8 @@ local function rgb_to_xterm256(r, g, b)
     for i = 2, #cube_levels do
       local diff = math.abs(x - cube_levels[i])
       if diff >= min_diff then
-        -- Levels are sorted, so we can return as soon as the difference
-        -- starts increasing again.
+        -- Levels are sorted, so we can return as soon as the difference starts
+        -- increasing again.
         return i - 1
       end
       min_diff = diff
@@ -137,7 +146,7 @@ local function rgb_to_xterm256(r, g, b)
 end
 
 local menu_lump_to_label = {
-  -- MainMenu
+  -- Main Menu
   M_NGAME = "New Game",
   M_OPTION = "Options",
   M_LOADG = "Load Game",
@@ -145,59 +154,64 @@ local menu_lump_to_label = {
   M_RDTHIS = "Read This!",
   M_QUITG = "Quit Game",
 
-  -- EpisodeMenu
-  -- TODO: these very much depend on the WAD
-  M_EPI1 = "Knee-Deep in the Dead",
-  M_EPI2 = "The Shores of Hell",
-  M_EPI3 = "Inferno",
-  M_EPI4 = "Thy Flesh Consumed",
+  -- Episode Menu; text highly depends on the IWAD, so just use generic labels.
+  M_EPI1 = "Episode 1",
+  M_EPI2 = "Episode 2",
+  M_EPI3 = "Episode 3",
+  M_EPI4 = "Episode 4",
 
-  -- NewGameMenu
+  -- New Game Menu
   M_JKILL = "I'm too young to die.",
   M_ROUGH = "Hey, not too rough.",
   M_HURT = "Hurt me plenty.",
   M_ULTRA = "Ultra-Violence.",
   M_NMARE = "Nightmare!",
 
-  -- OptionsMenu
+  -- Options Menu
   M_ENDGAM = "End Game",
   M_MESSG = "Messages:",
   M_DETAIL = "Graphic Detail:",
-  M_SCRNSZ = "Screen Size",
-  M_MSENS = "Mouse Sensitivity",
+  M_SCRNSZ = "Screen Size:",
+  M_MSENS = "Mouse Sensitivity:",
   M_SVOL = "Sound Volume",
 
-  -- SoundMenu
-  M_SFXVOL = "Sfx Volume",
-  M_MUSVOL = "Music Volume",
+  -- Sound Menu
+  M_SFXVOL = "Sfx Volume:",
+  M_MUSVOL = "Music Volume:",
 }
+
+local menu_type = require("actually-doom").menu_type
+local intermission_state = require("actually-doom").intermission_state
 
 local menu_type_to_header_lines = {
-  [MenuType.NEW_GAME] = "NEW GAME\n\nChoose Skill Level:",
-  [MenuType.EPISODE] = "NEW GAME\n\nWhich Episode?",
-  [MenuType.LOAD_GAME] = "LOAD GAME",
-  [MenuType.SAVE_GAME] = "SAVE GAME",
-  [MenuType.OPTIONS] = "OPTIONS",
-  [MenuType.SOUND] = "OPTIONS\n\nSound Volume:",
+  [menu_type.NEW_GAME] = "NEW GAME\n\nChoose Skill Level:",
+  [menu_type.EPISODE] = "NEW GAME\n\nWhich Episode?",
+  [menu_type.LOAD_GAME] = "LOAD GAME",
+  [menu_type.SAVE_GAME] = "SAVE GAME",
+  [menu_type.OPTIONS] = "OPTIONS",
+  [menu_type.SOUND] = "OPTIONS\n\nSound Volume:",
 }
 
-local right_arms_keys_cols = #" 234567     XXX "
-local right_ammo_cols = #" Bull XXX / XXX "
+local pause_label = "Pause"
+local finished_label = "Finished"
+local leaving_label = "Leaving"
 
 --- @param pixels string
+--- @param menu Menu?
+--- @param intermission Intermission?
 --- @param draw_game_msgs boolean?
 --- @param draw_menu_msgs boolean?
 --- @param draw_automap_title boolean?
 --- @param draw_status_bar boolean?
---- @param draw_menu boolean?
 --- @param draw_pause boolean?
 function M:refresh(
   pixels,
+  menu,
+  intermission,
   draw_game_msgs,
   draw_menu_msgs,
   draw_automap_title,
   draw_status_bar,
-  draw_menu,
   draw_pause
 )
   if not self.screen.term_chan then
@@ -312,7 +326,8 @@ function M:refresh(
           -- Foreground colour to xterm pure yellow, write counts.
           "\27[%u;%uH\27[38;5;231m %s \27[38;5;226m%3d / %3d ",
           self.screen.term_height - 4 + row,
-          self.screen.term_width - (right_ammo_cols - 1),
+          -- Length of " Bull XXX / XXX ", minus one.
+          self.screen.term_width - 15,
           label,
           ammo,
           max_ammo
@@ -349,7 +364,8 @@ function M:refresh(
       "\27[",
       self.screen.term_height,
       ";",
-      self.screen.term_width - (right_arms_keys_cols - 1),
+      -- Length of " 234567     XXX ", minus one.
+      self.screen.term_width - 15,
       "H "
     )
     for i = 1, #player_status.arms do -- Slots numbered 2-7.
@@ -401,15 +417,104 @@ function M:refresh(
     end
   end
 
+  local function write_msg_attribs()
+    -- Set background colour to xterm pure black, foreground to xterm pure red.
+    scratch_buf:put "\27[48;5;16m\27[38;5;196m"
+  end
+
   if
-    draw_automap_title
+    menu
+    or intermission
+    or draw_automap_title
     or draw_game_msgs
-    or draw_menu
     or draw_menu_msgs
     or draw_pause
   then
-    -- Set background colour to xterm pure black, foreground to xterm pure red.
-    scratch_buf:put "\27[48;5;16m\27[38;5;196m"
+    write_msg_attribs()
+  end
+
+  if intermission and not menu then
+    local level_name = assert(doom.automap_title)
+    if intermission.state == intermission_state.STAT_COUNT then
+      local start_row = center(9, self.screen.term_height)
+      -- Foreground colour to xterm pure white, write level name, restore
+      -- foreground to xterm pure red, write label.
+      scratch_buf:put(
+        "\27[38;5;231m\27[",
+        start_row,
+        ";",
+        center(#level_name, self.screen.term_width),
+        "H",
+        level_name,
+        "\n\27[38;5;196m\27[",
+        center(#finished_label, self.screen.term_width),
+        "G",
+        finished_label
+      )
+
+      -- Number of characters in the longest line: "Secret:   XXX%"
+      local label_start_col = center(14, self.screen.term_width)
+      -- "Secret:   ", but minus 1 as columns are already 1-based.
+      local value_min_col = label_start_col + 9
+      -- "XX:XX", but an exclusive column index.
+      local value_end_col = value_min_col + 5
+
+      --- @param value integer?
+      local function write_percent(value)
+        if value then
+          -- "XXX%", "XX%" or "X%"
+          local value_len = value < 10 and 2 or value < 100 and 3 or 4
+          local start_col = math.max(value_min_col, value_end_col - value_len)
+          scratch_buf:put("\27[", start_col, "G", value, "%")
+        end
+      end
+
+      --- @param total_secs integer?
+      local function write_time(total_secs)
+        if total_secs then
+          local mins = math.floor(total_secs / 60)
+          local secs = total_secs % 60
+          local value_len = mins > 0 and 5 or 3 -- "XX:XX" or ":XX"
+          local start_col = math.max(value_min_col, value_end_col - value_len)
+          scratch_buf:put("\27[", start_col, "G")
+
+          if mins > 0 then
+            scratch_buf:putf("%0.2u", mins)
+          end
+          scratch_buf:putf(":%0.2u", secs)
+        end
+      end
+
+      scratch_buf:put("\n\n\27[", label_start_col, "GKills:")
+      write_percent(intermission.kills)
+
+      scratch_buf:put("\n\27[", label_start_col, "GItems:")
+      write_percent(intermission.items)
+
+      scratch_buf:put("\n\27[", label_start_col, "GSecret:")
+      write_percent(intermission.secret)
+
+      scratch_buf:put("\n\n\27[", label_start_col, "GTime:")
+      write_time(intermission.time)
+
+      scratch_buf:put("\n\27[", label_start_col, "GPar:")
+      write_time(intermission.par)
+    else
+      -- TODO: should say the next level we're entering, but this is easier.
+      -- Write label, foreground to xterm pure white, write level name, restore
+      -- foreground to xterm pure red.
+      scratch_buf:put(
+        "\27[;",
+        center(#leaving_label, self.screen.term_width),
+        "H",
+        leaving_label,
+        "\27[38;5;231m\27[2;",
+        center(#level_name, self.screen.term_width),
+        "H",
+        level_name,
+        "\27[38;5;196m"
+      )
+    end
   end
   if draw_automap_title then
     local row = math.max(1, self.screen.term_height - 3)
@@ -418,29 +523,105 @@ function M:refresh(
   if draw_game_msgs then
     scratch_buf:put("\27[H", doom.game_msg)
   end
-  if draw_menu then
+  if menu then
     local labels = {}
     local max_label_len = 0
-    for i, lump in ipairs(self.menu.lumps) do
-      labels[i] = menu_lump_to_label[lump] or lump
-      max_label_len = math.max(max_label_len, #labels[i])
+
+    if menu.type == menu_type.SAVE_GAME or menu.type == menu_type.LOAD_GAME then
+      local vars = menu.vars --[[@as LoadOrSaveGameMenuVars]]
+      for i, slot in ipairs(vars.save_slots) do
+        labels[i] = ("Slot %d: %s%s"):format(
+          i,
+          slot,
+          i == vars.save_slot_edit_i and "_" or ""
+        )
+        max_label_len = math.max(max_label_len, #labels[i])
+      end
+    else
+      for i, lump in ipairs(menu.lumps) do
+        labels[i] = menu_lump_to_label[lump] or lump
+        max_label_len = math.max(max_label_len, #labels[i])
+      end
     end
 
-    local start_row = center(#self.menu.lumps, self.screen.term_height)
-    local header = menu_type_to_header_lines[self.menu.type]
+    local start_row = center(#menu.lumps, self.screen.term_height)
+    local header = menu_type_to_header_lines[menu.type]
     if header then
       local line_count = 1 + select(2, header:gsub("\n", ""))
       write_multiline_centered(header, math.max(1, start_row - line_count - 1))
     end
     scratch_buf:put("\27[", start_row, "H")
 
-    local col = center(max_label_len, self.screen.term_width)
+    --- @param value integer
+    --- @param width integer
+    local function write_thermo(value, width)
+      -- Set background colour to xterm #3a3a3a
+      scratch_buf:put "\27[48;5;237m"
+
+      if value > 0 then
+        -- Set foreground colour to xterm #121212, write track symbols.
+        scratch_buf:put "\27[38;5;233m"
+        for _ = 0, value - 1 do
+          scratch_buf:put "─"
+        end
+      end
+
+      -- Set foreground colour to xterm pure yellow, write knob symbol.
+      scratch_buf:put "\27[38;5;226m■"
+
+      if value < width - 1 then
+        -- Set foreground colour to xterm #121212, write track symbols.
+        scratch_buf:put "\27[38;5;233m"
+        for _ = value, width - 2 do
+          scratch_buf:put "─"
+        end
+      end
+
+      write_msg_attribs()
+    end
+
+    local label_start_col = center(max_label_len, self.screen.term_width)
+    if menu.vars then
+      -- Extra room for the thermos and crap.
+      label_start_col = math.max(1, label_start_col - 6)
+    end
+    local function move_to_value_col()
+      scratch_buf:put("\27[", label_start_col + max_label_len + 1, "G")
+    end
+
     for i, label in ipairs(labels) do
       if label ~= "" then
-        if i == self.menu.selected_i then
-          scratch_buf:put("\27[", math.max(1, col - 4), "G💀 ")
+        if i == menu.selected_i then
+          scratch_buf:put("\27[", math.max(1, label_start_col - 4), "G💀 ")
         end
-        scratch_buf:put("\27[", col, "G", label)
+        scratch_buf:put("\27[", label_start_col, "G", label)
+
+        local lump = menu.lumps[i]
+        if lump == "M_MESSG" then
+          local vars = menu.vars --[[@as OptionsMenuVars]]
+          move_to_value_col()
+          scratch_buf:put(vars.messages_on and "ON" or "OFF")
+        elseif lump == "M_DETAIL" then
+          local vars = menu.vars --[[@as OptionsMenuVars]]
+          move_to_value_col()
+          scratch_buf:put(vars.low_detail and "LOW" or "HIGH")
+        elseif lump == "M_SCRNSZ" then
+          local vars = menu.vars --[[@as OptionsMenuVars]]
+          move_to_value_col()
+          write_thermo(vars.screen_size, 9)
+        elseif lump == "M_MSENS" then
+          local vars = menu.vars --[[@as OptionsMenuVars]]
+          move_to_value_col()
+          write_thermo(vars.mouse_sensitivity, 10)
+        elseif lump == "M_SFXVOL" then
+          local vars = menu.vars --[[@as SoundMenuVars]]
+          move_to_value_col()
+          write_thermo(vars.sfx_volume, 16)
+        elseif lump == "M_MUSVOL" then
+          local vars = menu.vars --[[@as SoundMenuVars]]
+          move_to_value_col()
+          write_thermo(vars.music_volume, 16)
+        end
       end
       scratch_buf:put "\n"
     end
@@ -449,8 +630,12 @@ function M:refresh(
     write_multiline_centered(doom.menu_msg)
   end
   if draw_pause then
-    local label = "Pause"
-    scratch_buf:put("\27[;", center(#label, self.screen.term_width), "H", label)
+    scratch_buf:put(
+      "\27[;",
+      center(#pause_label, self.screen.term_width),
+      "H",
+      pause_label
+    )
   end
 
   -- When using RGB, it's possible for Nvim to run out of free highlight

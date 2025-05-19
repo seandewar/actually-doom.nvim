@@ -1616,31 +1616,46 @@ void M_Drawer(void)
         currentMenu->routine(); // call Draw routine
 
     if (detached_ui) {
-        DG_DrawDetachedUI(DUI_MENU);
-
         duimenutype_t type;
+        duimenuvars_t vars;
+        const duimenuvars_t *varsp = NULL;
+
         if (currentMenu == &MainDef)
             type = DMENU_MAIN;
         else if (currentMenu == &EpiDef)
             type = DMENU_EPISODE;
         else if (currentMenu == &NewDef)
             type = DMENU_NEW_GAME;
-        else if (currentMenu == &OptionsDef)
+        else if (currentMenu == &OptionsDef) {
             type = DMENU_OPTIONS;
-        else if (currentMenu == &ReadDef1)
+
+            vars.options.low_detail = detailLevel;
+            vars.options.messages_on = showMessages;
+            vars.options.mouse_sensitivity = mouseSensitivity;
+            vars.options.screen_size = screenblocks - 3;
+            varsp = &vars;
+        } else if (currentMenu == &ReadDef1)
             type = DMENU_README1;
         else if (currentMenu == &ReadDef2)
             type = DMENU_README2;
-        else if (currentMenu == &SoundDef)
+        else if (currentMenu == &SoundDef) {
             type = DMENU_SOUND;
-        else if (currentMenu == &LoadDef)
-            type = DMENU_LOAD_GAME;
-        else if (currentMenu == &SaveDef)
-            type = DMENU_SAVE_GAME;
-        else
+
+            vars.sound.sfx_volume = sfxVolume;
+            vars.sound.music_volume = musicVolume;
+            varsp = &vars;
+        } else if (currentMenu == &LoadDef || currentMenu == &SaveDef) {
+            type = currentMenu == &LoadDef ? DMENU_LOAD_GAME : DMENU_SAVE_GAME;
+
+            vars.load_or_save_game.save_slot_count = load_end;
+            vars.load_or_save_game.save_slots = savegamestrings;
+            vars.load_or_save_game.save_slot_edit_i =
+                saveStringEnter ? saveSlot : -1;
+            varsp = &vars;
+        } else
             abort();
 
-        DG_DrawMenu(type, currentMenu, itemOn);
+        DG_DrawMenu(type, currentMenu, itemOn, varsp);
         return;
     }
 
