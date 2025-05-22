@@ -16,6 +16,8 @@ then
 end
 
 api.nvim_create_user_command("Doom", function(args)
+  local iwad_path = args.fargs[1]
+
   if not args.bang then
     local ui = require "actually-doom.ui"
     local screen_buf = args.count
@@ -39,7 +41,7 @@ api.nvim_create_user_command("Doom", function(args)
         )
         return
       end
-    else
+    elseif not iwad_path then
       -- Jump to the highest-numbered (most recently created) screen buffer.
       screen_buf = vim
         .iter(pairs(ui.screen_buf_to_doom))
@@ -54,5 +56,12 @@ api.nvim_create_user_command("Doom", function(args)
     end
   end
 
-  require("actually-doom").play()
-end, { desc = "Play DOOM", bang = true, count = true, bar = true })
+  require("actually-doom").play(iwad_path)
+end, {
+  desc = "Play DOOM",
+  bang = true,
+  count = true,
+  nargs = "?",
+  complete = "file",
+  bar = true,
+})

@@ -408,7 +408,8 @@ end
 
 --- @param doom Doom
 --- @param sock_path string
-local function init_process(doom, sock_path)
+--- @param iwad_path string
+local function init_process(doom, sock_path, iwad_path)
   --- @param console_hl string?
   --- @return fun(err: nil|string, data: string|nil)
   --- @nodiscard
@@ -427,7 +428,7 @@ local function init_process(doom, sock_path)
     "-listen",
     sock_path,
     "-iwad",
-    fs.joinpath(script_dir, "../../doom/DOOM1.WAD"),
+    iwad_path,
   }, {
     stdout = new_out_cb(),
     stderr = new_out_cb "Warn",
@@ -851,8 +852,11 @@ local function init_connection(doom, sock_path)
   schedule_connect(500)
 end
 
+--- @param iwad_path string?
 --- @return Doom
-function Doom.run()
+function Doom.run(iwad_path)
+  iwad_path = iwad_path or fs.joinpath(script_dir, "../../doom/DOOM1.WAD")
+
   local doom = setmetatable({
     check_timer = assert(uv.new_timer()),
     send_buf = require("string.buffer").new(256),
@@ -868,7 +872,7 @@ function Doom.run()
     uv.os_getpid(),
     uv.hrtime()
   )
-  local ok, rv = pcall(init_process, doom, sock_path)
+  local ok, rv = pcall(init_process, doom, sock_path, iwad_path)
   if not ok then
     -- Error starting DOOM. Not using close_on_err here, as we don't want a
     -- verbose emsg, and we close the console as we don't expect much there yet.
@@ -971,9 +975,10 @@ function Doom:close_on_err_wrap(f)
   end
 end
 
+--- @param iwad_path string?
 --- @return Doom?
-function M.play()
-  local ok, rv = pcall(Doom.run)
+function M.play(iwad_path)
+  local ok, rv = pcall(Doom.run, iwad_path)
   if not ok then
     vim.notify(tostring(rv), log.levels.ERROR)
     return nil
