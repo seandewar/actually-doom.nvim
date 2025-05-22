@@ -2,7 +2,12 @@
 
 _Actually_ play DOOM in Neovim v0.11+ on Linux!
 
-![Screenshot](https://github.com/user-attachments/assets/a20eb1c6-0522-4db7-98a2-3bc86ca6ac67)
+<p align="center">
+    <img alt="Kitty graphics on" width="54%" src="https://github.com/user-attachments/assets/a20eb1c6-0522-4db7-98a2-3bc86ca6ac67"/>
+    <img alt="Kitty graphics off" width="45%" src="https://github.com/user-attachments/assets/e9c451c9-4561-4db6-a3b9-1f07dad7813a"/>
+    <br/>
+    <i>Screenshots with kitty graphics support enabled and disabled</i>
+</p>
 
 ## Prerequisites
 
@@ -39,7 +44,7 @@ within the terminal.
 Fortunately, the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/)
 provides the ability to [detect these events](https://sw.kovidgoyal.net/kitty/keyboard-protocol/#event-types),
 but [Neovim currently lacks support](https://github.com/neovim/neovim/issues/27509)
-for them.
+for this.
 
 ### Why no Windows/Mac/whatever support?
 

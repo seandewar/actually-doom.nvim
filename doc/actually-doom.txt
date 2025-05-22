@@ -19,16 +19,18 @@ To use this plugin, the following is required:
 COMMANDS					*actually-doom-commands*
 
 						*:Doom*
-:[N]Doom[!]		Play DOOM.  If [N] is given, it is the buffer number
-			of an existing screen to switch to.  If [!] is
-			present, then a new instance of DOOM is started
-			regardless of whether one is already running.
+:[N]Doom[!] [iwad]	Play DOOM.  If [N] is given, it is the buffer number
+			of an existing screen to switch to.  If [iwad] is
+			given, it is the path of the IWAD file to use.
+
+			If [!] or [iwad] is present then a new instance of
+			DOOM is started regardless of whether one is already
+			running.
 
 ==============================================================================
 GAME CONTROLS				*actually-doom-game-controls*
 
-Controls are similar to vanilla DOOM's, which can be viewed via the in-game
-help menu (press <F1>).  The most important are:
+Controls are similar to vanilla DOOM's.  The most important are:
 
 						*actually-doom_<Esc>*
 <Esc>			Toggle the menu.
