@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "doomtype.h"
+#include "f_finale.h"
 #include "i_video.h"
 #include "m_menu.h"
 #include "p_saveg.h"
@@ -85,6 +86,7 @@ void DG_WipeTick(void);
 void DG_OnGameMessage(const char *prefix, const char *msg);
 void DG_OnMenuMessage(const char *msg);
 void DG_OnSetAutomapTitle(const char *title);
+void DG_OnSetFinaleText(finalestage_t stage, const char *text);
 void DG_DrawFrame(void);
 void DG_DrawDetachedUI(duitype_t ui);
 // "vars" may be in temporary storage!
@@ -92,6 +94,7 @@ void DG_DrawMenu(duimenutype_t type, const menu_t *menu, short selected_i,
                  const duimenuvars_t *vars);
 // "stats" may be in temporary storage!
 void DG_DrawIntermission(stateenum_t state, const duiwistats_t *stats);
+void DG_DrawFinaleText(int count);
 void DG_SleepMs(uint32_t ms);
 uint32_t DG_GetTicksMs(void);
 boolean DG_GetInput(input_t *input);

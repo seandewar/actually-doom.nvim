@@ -26,6 +26,12 @@
 // FINALE
 //
 
+typedef enum {
+    F_STAGE_TEXT = 0,
+    F_STAGE_ARTSCREEN = 1,
+    F_STAGE_CAST = 2,
+} finalestage_t;
+
 // Called by main loop.
 boolean F_Responder(event_t *ev);
 

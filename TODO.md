@@ -1,5 +1,4 @@
 # High priority
-- [ ] Detached UI for finale, clean up detached_ui code
 - [ ] Automatic rebuilding of the executable.
 - [ ] Plugin configuration.
 

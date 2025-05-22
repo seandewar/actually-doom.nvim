@@ -2,6 +2,10 @@ local api = vim.api
 local bit = require "bit"
 local fn = vim.fn
 
+local menu_type = require("actually-doom").menu_type
+local intermission_state = require("actually-doom").intermission_state
+local finale_stage = require("actually-doom").finale_stage
+
 local ffi
 do
   local ok, rv = pcall(require, "ffi")
@@ -180,9 +184,6 @@ local menu_lump_to_label = {
   M_MUSVOL = "Music Volume:",
 }
 
-local menu_type = require("actually-doom").menu_type
-local intermission_state = require("actually-doom").intermission_state
-
 local menu_type_to_header_lines = {
   [menu_type.NEW_GAME] = "NEW GAME\n\nChoose Skill Level:",
   [menu_type.EPISODE] = "NEW GAME\n\nWhich Episode?",
@@ -199,6 +200,7 @@ local leaving_label = "Leaving"
 --- @param pixels string
 --- @param menu Menu?
 --- @param intermission Intermission?
+--- @param finale_text_len integer
 --- @param draw_game_msgs boolean?
 --- @param draw_menu_msgs boolean?
 --- @param draw_automap_title boolean?
@@ -208,6 +210,7 @@ function M:refresh(
   pixels,
   menu,
   intermission,
+  finale_text_len,
   draw_game_msgs,
   draw_menu_msgs,
   draw_automap_title,
@@ -422,9 +425,11 @@ function M:refresh(
     scratch_buf:put "\27[48;5;16m\27[38;5;196m"
   end
 
+  local draw_finale = doom.finale and finale_text_len > 0
   if
     menu
     or intermission
+    or draw_finale
     or draw_automap_title
     or draw_game_msgs
     or draw_menu_msgs
@@ -515,6 +520,14 @@ function M:refresh(
         "\27[38;5;196m"
       )
     end
+  end
+  if draw_finale and not menu then
+    local text = doom.finale.text:sub(1, finale_text_len)
+    local start_row = doom.finale.stage == finale_stage.CAST
+        and math.max(1, self.screen.term_height - 1)
+      or nil
+
+    write_multiline_centered(text, start_row)
   end
   if draw_automap_title then
     local row = math.max(1, self.screen.term_height - 3)

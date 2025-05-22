@@ -23,20 +23,16 @@
 #include "d_englsh.h"
 #include "d_event.h"
 #include "d_main.h"
+#include "doomgeneric.h"
 #include "doomstat.h"
 #include "i_swap.h"
+#include "r_main.h"
 #include "r_state.h"
 #include "s_sound.h"
 #include "sounds.h"
 #include "v_video.h"
 #include "w_wad.h"
 #include "z_zone.h"
-
-typedef enum {
-    F_STAGE_TEXT,
-    F_STAGE_ARTSCREEN,
-    F_STAGE_CAST,
-} finalestage_t;
 
 // ?
 // #include "doomstat.h"
@@ -133,6 +129,7 @@ void F_StartFinale(void)
 
     finalestage = F_STAGE_TEXT;
     finalecount = 0;
+    DG_OnSetFinaleText(finalestage, finaletext);
 }
 
 boolean F_Responder(event_t *event)
@@ -228,6 +225,11 @@ void F_TextWrite(void)
     count = ((signed int)finalecount - 10) / TEXTSPEED;
     if (count < 0)
         count = 0;
+    if (detached_ui) {
+        DG_DrawFinaleText(count);
+        return;
+    }
+
     for (; count; count--) {
         c = *ch++;
         if (!c)
@@ -305,6 +307,7 @@ void F_StartCast(void)
     castonmelee = 0;
     castattacking = false;
     S_ChangeMusic(mus_evil, true);
+    DG_OnSetFinaleText(finalestage, castorder[castnum].name);
 }
 
 //
@@ -328,6 +331,7 @@ void F_CastTicker(void)
             S_StartSound(NULL, mobjinfo[castorder[castnum].type].seesound);
         caststate = &states[mobjinfo[castorder[castnum].type].seestate];
         castframes = 0;
+        DG_OnSetFinaleText(finalestage, castorder[castnum].name);
     } else {
         // just advance to next state in animation
         if (caststate == &states[S_PLAY_ATK1])
@@ -525,7 +529,10 @@ void F_CastDrawer(void)
     // erase the entire screen to a background
     V_DrawPatch(0, 0, W_CacheLumpName("BOSSBACK", PU_CACHE));
 
-    F_CastPrint(castorder[castnum].name);
+    if (detached_ui)
+        DG_DrawFinaleText(UINT16_MAX);
+    else
+        F_CastPrint(castorder[castnum].name);
 
     // draw the current frame in the middle of the screen
     sprdef = &sprites[caststate->sprite];

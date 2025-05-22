@@ -25,6 +25,13 @@ local M = {
     STAT_COUNT = 0,
     SHOW_NEXT_LOC = 1,
   },
+
+  --- @enum FinaleStage
+  finale_stage = {
+    TEXT = 0,
+    ARTSCREEN = 1,
+    CAST = 2,
+  },
 }
 
 --- Supported message protocol version for communications with the DOOM process.
@@ -58,6 +65,10 @@ end)()
 --- @field alt boolean
 --- @field release_time integer
 
+--- @class (exact) Finale
+--- @field stage FinaleStage
+--- @field text string
+
 --- @class (exact) Doom
 --- @field console Console
 --- @field process vim.SystemObj
@@ -72,6 +83,7 @@ end)()
 --- @field game_msg string
 --- @field menu_msg string
 --- @field automap_title string
+--- @field finale Finale?
 --- @field closed boolean?
 ---
 --- @field run function
@@ -532,9 +544,10 @@ local function recv_msg_loop(doom, buf)
   doom:schedule_check()
 
   -- TODO: merge AMSG_FRAME_DRAW_MENU with AMSG_FRAME so we don't need this.
-  --       same for intermission crap
+  --       same for intermission and finale crap
   local menu --- @type Menu?
   local intermission --- @type Intermission?
+  local finale_text_len = 0 --- @type integer
 
   --- @type table<integer, fun(): boolean?>
   local msg_handlers = {
@@ -556,6 +569,7 @@ local function recv_msg_loop(doom, buf)
             pixels,
             menu,
             intermission,
+            finale_text_len,
             bit.band(enabled_dui_bits, 1) ~= 0,
             bit.band(enabled_dui_bits, 2) ~= 0,
             bit.band(enabled_dui_bits, 4) ~= 0,
@@ -565,6 +579,7 @@ local function recv_msg_loop(doom, buf)
           -- TODO: hack
           menu = nil
           intermission = nil
+          finale_text_len = 0
         end)
       end
 
@@ -641,6 +656,14 @@ local function recv_msg_loop(doom, buf)
         ('AMSG_AUTOMAP_TITLE: title="%s"\n'):format(doom.automap_title),
         "Debug"
       )
+    end,
+
+    -- AMSG_FINALE_TEXT
+    [10] = function()
+      doom.finale = {
+        stage = read_u8(),
+        text = read_string(),
+      }
     end,
 
     -- AMSG_FRAME_MENU
@@ -720,6 +743,16 @@ local function recv_msg_loop(doom, buf)
           time = time >= 0 and time or nil,
           par = par >= 0 and par or nil,
         }
+      end
+    end,
+
+    -- AMSG_FRAME_FINALE
+    [11] = function()
+      local text_len = read_u16()
+
+      local cell_gfx = doom.screen:cell_gfx()
+      if cell_gfx then
+        finale_text_len = text_len
       end
     end,
 

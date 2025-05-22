@@ -68,6 +68,9 @@ enum {
     // AMSG_AUTOMAP_TITLE, title: string
     AMSG_AUTOMAP_TITLE = 7,
 
+    // AMSG_FINALE_TEXT text: string
+    AMSG_FINALE_TEXT = 10,
+
     // AMSG_FRAME_MENU, type: u8, item_lumps: string[], selected_i: u8
     //   if type == DMENU_OPTIONS:
     //      toggle_bits: u8 (bit 0: low_detail, 1: messages_on)
@@ -89,6 +92,9 @@ enum {
     //      time_total_secs: i32,
     //      par_total_secs: i32,
     AMSG_FRAME_INTERMISSION = 9,
+
+    // AMSG_FRAME_FINALE, text_len: u16
+    AMSG_FRAME_FINALE = 11,
 
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
@@ -1060,6 +1066,16 @@ void DG_DrawIntermission(stateenum_t state, const duiwistats_t *stats)
     });
 }
 
+void DG_DrawFinaleText(int count)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FRAME_FINALE);
+        // TODO: unsigned vs signed; will this trick work??
+        assert((uint16_t)count == count);
+        Comm_Write16(count);
+    });
+}
+
 void DG_OnGameMessage(const char *prefix, const char *msg)
 {
     COMM_WRITE_MSG({
@@ -1085,6 +1101,16 @@ void DG_OnSetAutomapTitle(const char *title)
     COMM_WRITE_MSG({
         Comm_Write8(AMSG_AUTOMAP_TITLE);
         Comm_WriteString(title);
+    });
+}
+
+void DG_OnSetFinaleText(finalestage_t stage, const char *text)
+{
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_FINALE_TEXT);
+        assert((uint8_t)stage == stage);
+        Comm_Write8(stage);
+        Comm_WriteString(text);
     });
 }
 
