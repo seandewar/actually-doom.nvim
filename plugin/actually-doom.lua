@@ -56,7 +56,15 @@ api.nvim_create_user_command("Doom", function(args)
     end
   end
 
-  require("actually-doom").play(iwad_path)
+  local ok, rv
+  if iwad_path then
+    ok, rv = pcall(require("actually-doom").Doom.run, iwad_path)
+  else
+    ok, rv = pcall(require("actually-doom").play)
+  end
+  if not ok then
+    vim.notify(tostring(rv), log.levels.ERROR)
+  end
 end, {
   desc = "Play DOOM",
   bang = true,

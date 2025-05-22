@@ -1,9 +1,6 @@
 # High priority
-- [ ] Nvimify UI elements (hide them from the framebuffer and draw them inside
-  Nvim); also consider `vim.ui.select()` for menus, `vim.ui.input()` for text
-  inputs...
+- [ ] Detached UI for finale, clean up detached_ui code
 - [ ] Automatic rebuilding of the executable.
-- [ ] IWAD selection.
 - [ ] Plugin configuration.
 
 # Medium Priority

@@ -2,7 +2,7 @@ local api = vim.api
 local bit = require "bit"
 local fn = vim.fn
 local fs = vim.fs
-local log = vim.log
+local ui = vim.ui
 local uv = vim.uv
 
 local M = {
@@ -852,11 +852,9 @@ local function init_connection(doom, sock_path)
   schedule_connect(500)
 end
 
---- @param iwad_path string?
+--- @param iwad_path string
 --- @return Doom
 function Doom.run(iwad_path)
-  iwad_path = iwad_path or fs.joinpath(script_dir, "../../doom/DOOM1.WAD")
-
   local doom = setmetatable({
     check_timer = assert(uv.new_timer()),
     send_buf = require("string.buffer").new(256),
@@ -975,15 +973,41 @@ function Doom:close_on_err_wrap(f)
   end
 end
 
---- @param iwad_path string?
---- @return Doom?
-function M.play(iwad_path)
-  local ok, rv = pcall(Doom.run, iwad_path)
-  if not ok then
-    vim.notify(tostring(rv), log.levels.ERROR)
-    return nil
+--- @param result_cb fun(Doom?)?
+function M.play(result_cb)
+  result_cb = result_cb or function() end
+
+  local function input_path()
+    ui.input({
+      prompt = "Enter IWAD path: ",
+      default = fn.fnamemodify("", ":~"),
+      completion = "file",
+    }, function(path)
+      result_cb(path and Doom.run(path) or nil)
+    end)
   end
-  return rv
+
+  --- @type (string|true)[]
+  local choices = api.nvim_get_runtime_file("iwad/*", true)
+  if #choices == 0 then
+    input_path()
+    return
+  end
+  choices[#choices + 1] = true -- Input custom path.
+
+  ui.select(choices, {
+    prompt = "Select IWAD file: ",
+    format_item = function(item)
+      return item ~= true and fn.fnamemodify(item, ":~")
+        or "From custom path…"
+    end,
+  }, function(choice, _)
+    if choice == true then
+      input_path()
+    else
+      result_cb(choice and Doom.run(choice) or nil)
+    end
+  end)
 end
 
 M.Doom = Doom
