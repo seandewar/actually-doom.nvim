@@ -2,6 +2,7 @@ local api = vim.api
 local bit = require "bit"
 local fn = vim.fn
 local fs = vim.fs
+local log = vim.log
 local ui = vim.ui
 local uv = vim.uv
 
@@ -1041,6 +1042,59 @@ function M.play(result_cb)
       result_cb(choice and Doom.run(choice) or nil)
     end
   end)
+end
+
+--- @param args vim.api.keyset.create_user_command.command_args
+function M.play_cmd(args)
+  local iwad_path = args.fargs[1]
+
+  if not args.bang then
+    local doom_ui = require "actually-doom.ui"
+    local screen_buf = args.count
+    if screen_buf ~= 0 then
+      -- Jump to the buffer number specified as the count. Fail if it's invalid.
+      if not api.nvim_buf_is_valid(screen_buf) then
+        vim.notify(
+          ("[actually-doom.nvim] Buffer %d does not exist"):format(screen_buf),
+          log.levels.ERROR
+        )
+        return
+      end
+
+      local doom = doom_ui.screen_buf_to_doom[screen_buf]
+      if not doom or doom.closed then
+        vim.notify(
+          ("[actually-doom.nvim] No screen exists for buffer %d"):format(
+            screen_buf
+          ),
+          log.levels.ERROR
+        )
+        return
+      end
+    elseif not iwad_path then
+      -- Jump to the highest-numbered (most recently created) screen buffer.
+      screen_buf = vim
+        .iter(pairs(doom_ui.screen_buf_to_doom))
+        :fold(0, function(acc, buf, doom)
+          return not doom.closed and math.max(acc, buf) or acc
+        end)
+    end
+
+    if screen_buf > 0 then
+      doom_ui.screen_buf_to_doom[screen_buf].screen:goto_win()
+      return
+    end
+  end
+
+  local ok, rv
+  if iwad_path then
+    ok, rv = pcall(require("actually-doom").Doom.run, iwad_path)
+  else
+    ok, rv = pcall(require("actually-doom").play)
+  end
+  if not ok then
+    vim.notify(tostring(rv), log.levels.ERROR)
+  end
 end
 
 M.Doom = Doom

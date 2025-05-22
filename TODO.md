@@ -1,8 +1,8 @@
 # High priority
 - [ ] Automatic rebuilding of the executable.
-- [ ] Plugin configuration.
 
 # Medium Priority
+- [ ] Plugin configuration.
 - [ ] Implement music, maybe in the executable.
 - [ ] When Nvim gets kitty key press/release detection support, use that (or
   possibly make the executable listen for it, but that might be hard under
