@@ -387,21 +387,21 @@ function M.new(screen, shm_name)
     -- This check also avoids ID 0, which we can't use (as that tells the
     -- terminal to allocate its own; we can't inspect what ID it chooses because
     -- we silence responses to stop them from being interpreted as keystrokes).
-    if bit.band(kitty.image_id, 255) >= 16 then
+    if bit.band(kitty.image_id, 0xff) >= 16 then
       break
     end
   end
   -- Because we want compatibility with 256 colours, we won't be able to specify
   -- the middle 16 bits of the ID, so clear them.
-  kitty.image_id = bit.band(kitty.image_id, bit.bnot(16776960))
-  kitty.image_id_lsb = bit.band(kitty.image_id, 255)
+  kitty.image_id = bit.band(kitty.image_id, bit.bnot(0xffff00))
+  kitty.image_id_lsb = bit.band(kitty.image_id, 0xff)
   kitty.image_id_msb = bit.rshift(kitty.image_id, 24)
   -- Because Lua bitop normalizes numbers to the 32-bit signed range (see :help
   -- lua-bit-semantics), the ID will be treated as negative if the 31st bit is
   -- set. While this is fine in 32-bit Lua when formatting via %u, in 64-bit Lua
   -- the number is sign extended, so %u will result in too large of a value.
   -- Mask the low 32-bits via modulo to eliminate any sign-extended bits.
-  kitty.image_id = kitty.image_id % 4294967296
+  kitty.image_id = kitty.image_id % 0x100000000
 
   setup_term_buf(kitty)
   return kitty

@@ -266,9 +266,9 @@ function M:refresh(
           b = b + pb
         end
       end
-      r = math.min(255, math.floor(r / pix_count + 0.5))
-      g = math.min(255, math.floor(g / pix_count + 0.5))
-      b = math.min(255, math.floor(b / pix_count + 0.5))
+      r = math.min(0xff, math.floor(r / pix_count + 0.5))
+      g = math.min(0xff, math.floor(g / pix_count + 0.5))
+      b = math.min(0xff, math.floor(b / pix_count + 0.5))
       local colour = true_colour and rgb_key(r, g, b)
         or rgb_to_xterm256(r, g, b)
 

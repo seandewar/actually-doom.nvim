@@ -39,10 +39,6 @@ local M = {
 --- Bump this after a breaking protocol change.
 local supported_proto_version = 0
 
-local script_dir = (function()
-  return fn.fnamemodify(debug.getinfo(2, "S").source:sub(2), ":h:p")
-end)()
-
 --- @class (exact) PlayerStatus
 --- @field health integer
 --- @field armour integer
@@ -94,9 +90,9 @@ local Doom = {}
 --- @param s string
 --- @return string.buffer
 local function put_string(buf, s)
-  assert(#s <= 65535)
+  assert(#s <= 0xffff)
   return buf:put(
-    string.char(bit.band(#s, 255)),
+    string.char(bit.band(#s, 0xff)),
     string.char(bit.rshift(#s, 8)),
     s
   )
@@ -420,9 +416,10 @@ function Doom:flush_send()
 end
 
 --- @param doom Doom
+--- @param exe_path string
 --- @param sock_path string
 --- @param iwad_path string
-local function init_process(doom, sock_path, iwad_path)
+local function init_process(doom, exe_path, sock_path, iwad_path)
   --- @param console_hl string?
   --- @return fun(err: nil|string, data: string|nil)
   --- @nodiscard
@@ -437,7 +434,7 @@ local function init_process(doom, sock_path, iwad_path)
   end
 
   local sys_ok, sys_rv = pcall(vim.system, {
-    fs.joinpath(script_dir, "../../doom/build/actually_doom"),
+    exe_path,
     "-listen",
     sock_path,
     "-iwad",
@@ -455,7 +452,7 @@ local function init_process(doom, sock_path, iwad_path)
   end)
 
   if not sys_ok then
-    error(("[actually-doom.nvim] Failed to run DOOM: %s"):format(sys_rv), 0)
+    error(("Failed to run DOOM: %s"):format(sys_rv), 0)
   end
   doom.process = sys_rv
 
@@ -466,6 +463,7 @@ local function init_process(doom, sock_path, iwad_path)
   )
 end
 
+--- @async
 --- @param doom Doom
 --- @param buf string.buffer
 local function recv_msg_loop(doom, buf)
@@ -886,10 +884,13 @@ local function init_connection(doom, sock_path)
   schedule_connect(500)
 end
 
+--- @param console Console
+--- @param exe_path string
 --- @param iwad_path string
---- @return Doom
-function Doom.run(iwad_path)
+--- @return Doom?
+function Doom.run(console, exe_path, iwad_path)
   local doom = setmetatable({
+    console = console,
     check_timer = assert(uv.new_timer()),
     send_buf = require("string.buffer").new(256),
     mouse_button_mask = 0,
@@ -897,37 +898,33 @@ function Doom.run(iwad_path)
     menu_msg = "",
     automap_title = "",
   }, { __index = Doom })
-  doom.console = require("actually-doom.ui").Console.new(doom)
 
-  local sock_path = ("/run/user/%d/actually-doom.%d.%d"):format(
-    uv.getuid(),
-    uv.os_getpid(),
-    uv.hrtime()
-  )
-  local ok, rv = pcall(init_process, doom, sock_path, iwad_path)
-  if not ok then
-    -- Error starting DOOM. Not using close_on_err here, as we don't want a
-    -- verbose emsg, and we close the console as we don't expect much there yet.
-    doom:close(true)
-    error(rv, 0)
+  -- Less verbose Doom.close_on_err and doesn't include a stack trace.
+  local function close_on_err_quieter(...)
+    local ok, rv = pcall(...)
+    if not ok then
+      doom.console:plugin_print(rv, "Error")
+      doom:close()
+      error(rv, 0)
+    end
+    return rv
   end
 
-  doom:close_on_err(function()
-    doom.console.doom = doom
-    doom.console:update_buf_name()
-    local console_wins = fn.win_findbuf(doom.console.buf)
-    if #console_wins > 0 then
-      api.nvim_set_current_win(console_wins[1])
-    end
+  local sock_path = fs.joinpath(
+    fn.stdpath "run",
+    ("actually-doom.%d.%d"):format(uv.os_getpid(), uv.hrtime())
+  )
+  close_on_err_quieter(init_process, doom, exe_path, sock_path, iwad_path)
 
+  doom:close_on_err(function()
+    doom.console:set_doom(doom)
     init_connection(doom, sock_path)
   end)
 
   return doom
 end
 
---- @param close_console_win boolean?
-function Doom:close(close_console_win)
+function Doom:close()
   if self.closed then
     return
   end
@@ -948,7 +945,7 @@ function Doom:close(close_console_win)
   -- unloaded" message from us closing the screen.
   if self.console then
     vim.schedule(function()
-      self.console:close(close_console_win)
+      self.console:close()
     end)
   end
   if self.screen then
@@ -1007,9 +1004,46 @@ function Doom:close_on_err_wrap(f)
   end
 end
 
+--- @param iwad_path string?
 --- @param result_cb fun(Doom?)?
-function M.play(result_cb)
-  result_cb = result_cb or function() end
+function M.play(iwad_path, result_cb)
+  result_cb = result_cb or function(_) end
+
+  local function play_iwad()
+    if not iwad_path then
+      result_cb(nil)
+      return
+    end
+
+    local console = require("actually-doom.ui").Console.new()
+    local build = require "actually-doom.build"
+    build.rebuild(console, false, function(ok, _)
+      if not ok then
+        vim.notify(
+          (
+            "[actually-doom.nvim] DOOM build failed! "
+            .. 'See console for details via ":%db!"'
+          ):format(console.buf),
+          log.levels.ERROR
+        )
+        return
+      end
+
+      local doom_ok, doom_rv =
+        Doom.run(console, build.exe_install_path, iwad_path)
+      if not doom_ok then
+        vim.notify(
+          "[actually-doom.nvim] " .. tostring(doom_rv),
+          log.levels.ERROR
+        )
+      end
+    end)
+  end
+
+  if iwad_path then
+    play_iwad()
+    return
+  end
 
   local function input_path()
     ui.input({
@@ -1017,7 +1051,8 @@ function M.play(result_cb)
       default = fn.fnamemodify("", ":~"),
       completion = "file",
     }, function(path)
-      result_cb(path and Doom.run(path) or nil)
+      iwad_path = path
+      play_iwad()
     end)
   end
 
@@ -1039,7 +1074,8 @@ function M.play(result_cb)
     if choice == true then
       input_path()
     else
-      result_cb(choice and Doom.run(choice) or nil)
+      iwad_path = choice
+      play_iwad()
     end
   end)
 end
@@ -1086,14 +1122,9 @@ function M.play_cmd(args)
     end
   end
 
-  local ok, rv
-  if iwad_path then
-    ok, rv = pcall(require("actually-doom").Doom.run, iwad_path)
-  else
-    ok, rv = pcall(require("actually-doom").play)
-  end
+  local ok, rv = pcall(M.play, iwad_path)
   if not ok then
-    vim.notify(tostring(rv), log.levels.ERROR)
+    vim.notify("[actually-doom.nvim] " .. tostring(rv), log.levels.ERROR)
   end
 end
 

@@ -277,73 +277,73 @@ api.nvim_set_hl(0, "DoomConsoleDebug", {
 --- @field new function
 local Console = {}
 
---- @param doom Doom?
+--- @param console Console
+local function update_console_buf_name(console)
+  if not api.nvim_buf_is_valid(console.buf) then
+    return
+  end
+
+  local old_name = api.nvim_buf_get_name(console.buf)
+  local new_name = ("actually-doom://console//%d"):format(console.buf)
+  if console.doom and console.doom.process then
+    new_name = ("%s:%d"):format(new_name, console.doom.process.pid)
+  end
+
+  if new_name ~= old_name then
+    api.nvim_buf_set_name(console.buf, new_name)
+    if old_name ~= "" then
+      -- Wipeout the (alternate) buffer that now holds the old name.
+      local old_name_buf = fn.bufnr(("^%s$"):format(fn.fnameescape(old_name)))
+      if old_name_buf ~= -1 then
+        api.nvim_buf_delete(old_name_buf, { force = true })
+      end
+    end
+  end
+end
+
 --- @return Console
 --- @nodiscard
-function Console.new(doom)
+function Console.new()
   local console = setmetatable({
-    doom = doom,
     last_row = 0,
     last_col = 0,
     buf = api.nvim_create_buf(true, true),
   }, { __index = Console })
-  console:update_buf_name()
+
   api.nvim_set_option_value("modifiable", false, { buf = console.buf })
-
-  if doom then
-    -- Not a global autocmd as we may not have a screen yet when it's called.
-    console.close_autocmd = api.nvim_create_autocmd("BufUnload", {
-      group = augroup,
-      nested = true,
-      callback = vim.schedule_wrap(function(args)
-        if args.buf == doom.console.buf or args.buf == doom.screen.buf then
-          doom.console:plugin_print "Game buffer was unloaded; quitting\n"
-          doom:close()
-          return true -- Delete this autocmd (close should've done that anyway)
-        end
-      end),
-      desc = "[actually-doom.nvim] Quit game when buffers are unloaded",
-    })
-  end
-
-  local save_curwin = api.nvim_get_current_win()
-  api.nvim_command(("keepjumps tab %d sbuffer"):format(console.buf))
-  if api.nvim_win_is_valid(save_curwin) then
-    -- We'll choose when to enter the new tabpage.
-    api.nvim_set_current_win(save_curwin)
-  end
+  api.nvim_command(("tab %d sbuffer"):format(console.buf))
+  update_console_buf_name(console)
   return console
 end
 
---- @param close_win boolean?
-function Console:close(close_win)
+function Console:close()
   if self.close_autocmd then
     api.nvim_del_autocmd(self.close_autocmd)
   end
-  if close_win and api.nvim_buf_is_valid(self.buf) then
+  if api.nvim_buf_is_valid(self.buf) then
     api.nvim_buf_delete(self.buf, { force = true })
   end
 end
 
-function Console:update_buf_name()
-  if api.nvim_buf_is_valid(self.buf) then
-    local old_name = api.nvim_buf_get_name(self.buf)
-    local new_name = ("actually-doom://console//%d"):format(self.buf)
-    if self.doom and self.doom.process then
-      new_name = ("%s:%d"):format(new_name, self.doom.process.pid)
-    end
+--- @param doom Doom
+function Console:set_doom(doom)
+  assert(not self.doom)
+  self.doom = doom
+  update_console_buf_name(self)
 
-    if new_name ~= old_name then
-      api.nvim_buf_set_name(self.buf, new_name)
-      if old_name ~= "" then
-        -- Wipeout the (alternate) buffer that now holds the old name.
-        local old_name_buf = fn.bufnr(("^%s$"):format(fn.fnameescape(old_name)))
-        if old_name_buf ~= -1 then
-          api.nvim_buf_delete(old_name_buf, { force = true })
-        end
+  -- Not a global autocmd as we may not have a screen yet when it's called.
+  self.close_autocmd = api.nvim_create_autocmd("BufUnload", {
+    group = augroup,
+    nested = true,
+    callback = vim.schedule_wrap(function(args)
+      if args.buf == doom.console.buf or args.buf == doom.screen.buf then
+        doom.console:plugin_print "Game buffer was unloaded; quitting\n"
+        doom:close()
+        return true -- Delete this autocmd (close should've done that anyway)
       end
-    end
-  end
+    end),
+    desc = "[actually-doom.nvim] Quit game when buffers are unloaded",
+  })
 end
 
 --- @param text string
@@ -366,6 +366,14 @@ function Console:print(text, console_hl)
   vim._with({ noautocmd = true }, function()
     api.nvim_set_option_value("modifiable", true, { buf = self.buf })
   end)
+
+  if self.last_row >= api.nvim_buf_line_count(self.buf) then
+    -- Some contents were deleted for some reason. Reset the previous position
+    -- values to avoid errors when setting extmarks.
+    -- TODO: screw it, just query the last extmark and extend it via the API
+    self.last_row = 0
+    self.last_col = 0
+  end
 
   local lines = vim.split(text, "\n", { plain = true })
   api.nvim_buf_set_text(self.buf, -1, -1, -1, -1, lines)

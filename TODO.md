@@ -1,5 +1,4 @@
 # High priority
-- [ ] Automatic rebuilding of the executable.
 
 # Medium Priority
 - [ ] Plugin configuration.
@@ -8,8 +7,6 @@
   possibly make the executable listen for it, but that might be hard under
   Wayland (also we'll want to communicate with the client to figure out if a
   DOOM buffer has focus; otherwise ignore the keypresses))
-- [ ] Maybe move the rebuild logic to the plugin to eliminate the Make
-  dependency.
 
 # Low Priority
 - [ ] Maybe move terminal rendering and pixel blending to the executable if

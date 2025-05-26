@@ -682,6 +682,7 @@ static void CloseFrameShm(void)
 
 static void UnlinkFrameShm(void)
 {
+#ifndef __ANDROID__
     if (frame_shm_name[0] != '\0' && shm_unlink(frame_shm_name) == -1
         && errno != ENOENT) { // May have been unlinked already by the client.
         fprintf(
@@ -690,6 +691,7 @@ static void UnlinkFrameShm(void)
             "Warning: Failed to delete frame data shared memory object: %s\n",
             strerror(errno));
     }
+#endif
 
     frame_shm_name[0] = '\0';
 }
@@ -917,6 +919,7 @@ void DG_DrawFrame(void)
         goto end;
     }
 
+#ifndef __ANDROID__
     // Old file descriptor should already be closed, but make sure anyway.
     CloseFrameShm();
 
@@ -961,6 +964,11 @@ void DG_DrawFrame(void)
     }
 
     COMM_WRITE_MSG(Comm_Write8(AMSG_FRAME_SHM_READY));
+#else
+    I_Error(
+        LOG_PRE
+        "Shared memory object support not implemented on Android; quitting");
+#endif
 
 end:
     screenvisible = false;
