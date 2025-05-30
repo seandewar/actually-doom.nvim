@@ -35,10 +35,6 @@ local M = {
   },
 }
 
---- Supported message protocol version for communications with the DOOM process.
---- Bump this after a breaking protocol change.
-local supported_proto_version = 0
-
 --- @class (exact) PlayerStatus
 --- @field health integer
 --- @field armour integer
@@ -508,29 +504,12 @@ local function recv_msg_loop(doom, buf)
     return read_bytes(read_u16())
   end
 
-  local proto_version = read_u32()
   local res_x = read_u16()
   local res_y = read_u16()
   doom.console:plugin_print(
-    ("AMSG_INIT: proto_version=%d res_x=%d res_y=%d\n"):format(
-      proto_version,
-      res_x,
-      res_y
-    ),
+    ("AMSG_INIT: res_x=%d res_y=%d\n"):format(res_x, res_y),
     "Debug"
   )
-
-  if proto_version ~= supported_proto_version then
-    doom.console:plugin_print(
-      (
-        "DOOM process reports incompatible message protocol version %d "
-        .. "(expected %d); please rebuild the DOOM executable. Quitting\n"
-      ):format(proto_version, supported_proto_version),
-      "Error"
-    )
-    doom:close()
-    return
-  end
 
   doom.screen = require("actually-doom.ui").Screen.new(doom, res_x, res_y)
   doom:send_set_config_var("detached_ui", "1")
@@ -1019,13 +998,14 @@ function M.play(iwad_path, result_cb)
     local build = require "actually-doom.build"
     build.rebuild(console, false, function(ok, _)
       if not ok then
-        vim.notify(
-          (
-            "[actually-doom.nvim] DOOM build failed! "
-            .. 'See console for details via ":%db!"'
-          ):format(console.buf),
-          log.levels.ERROR
-        )
+        local msg = "[actually-doom.nvim] DOOM build failed!"
+        if api.nvim_buf_is_loaded(console.buf) then
+          msg = ('%s See console for details via ":%db!"'):format(
+            msg,
+            console.buf
+          )
+        end
+        vim.notify(msg, log.levels.ERROR)
         return
       end
 

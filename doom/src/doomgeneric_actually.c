@@ -23,9 +23,6 @@
 #include "m_argv.h"
 #include "m_config.h"
 
-// Bump after a breaking change to the messaging protocol.
-#define AMSG_PROTO_VERSION 0
-
 #define LOG_PRE "[actually-doom] "
 
 #define NS_PER_MS (1000 * 1000)
@@ -832,9 +829,8 @@ void DG_Init(void)
     CloseListenSocket();
     clock_start_ms = GetClockMs();
 
-    // "AMSG_INIT": proto_version: u32, res_x: u16, res_y: u16
+    // "AMSG_INIT": res_x: u16, res_y: u16
     COMM_WRITE_MSG({
-        Comm_Write32(AMSG_PROTO_VERSION);
         Comm_Write16(SCREENWIDTH);
         Comm_Write16(SCREENHEIGHT);
     });

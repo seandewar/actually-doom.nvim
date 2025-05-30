@@ -336,7 +336,10 @@ function Console:set_doom(doom)
     group = augroup,
     nested = true,
     callback = vim.schedule_wrap(function(args)
-      if args.buf == doom.console.buf or args.buf == doom.screen.buf then
+      if
+        args.buf == doom.console.buf
+        or (doom.screen and args.buf == doom.screen.buf)
+      then
         doom.console:plugin_print "Game buffer was unloaded; quitting\n"
         doom:close()
         return true -- Delete this autocmd (close should've done that anyway)
@@ -358,7 +361,7 @@ function Console:print(text, console_hl)
     end)
     return
   end
-  if not api.nvim_buf_is_valid(self.buf) then
+  if not api.nvim_buf_is_loaded(self.buf) then
     return
   end
 

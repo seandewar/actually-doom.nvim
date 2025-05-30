@@ -1,6 +1,7 @@
 local api = vim.api
 local fn = vim.fn
 local fs = vim.fs
+local ui = vim.ui
 local uv = vim.uv
 
 local data_dir = fn.stdpath "data"
@@ -21,8 +22,6 @@ local src_dir = fs.normalize(
   fs.joinpath(script_dir, "../../doom/src"),
   { expand_env = false }
 )
-
-local augroup = api.nvim_create_augroup("actually-doom.build", {})
 
 local object_names = {
   "am_map.o",
@@ -167,23 +166,50 @@ local function needs_rebuild()
   return false
 end
 
+--- @enum BuildLockChoice
+local lock_choices = {
+  WAIT = 1,
+  ABORT = 2,
+  IGNORE = 3,
+  DELETE = 4,
+}
+
+--- @type table<BuildLockChoice, string>
+local lock_choice_to_label = {
+  [lock_choices.WAIT] = "Wait for the lock to release",
+  [lock_choices.ABORT] = "Don't build",
+  [lock_choices.IGNORE] = "Build anyway without locking",
+  [lock_choices.DELETE] = "Delete the lock and retry",
+}
+
 --- @param console Console
---- @param result_cb fun(ok: boolean, rv: any) Called after at least one event loop tick.
+--- @param result_cb fun(ok: boolean, rv: any)
 local function acquire_lock(console, result_cb)
   local lock_path = fs.joinpath(data_dir, ".~actually-doom.nvim.lock")
-  local fd
+  local acquired_lock_fd
+  local retry_timer --- @type uv.uv_timer_t?
 
   local function release_lock()
-    if fd then -- Don't delete the lock if we didn't open it...
-      local ok, err_msg = uv.fs_unlink(lock_path)
-      if not ok then
-        console:plugin_print(
-          ("Failed to delete build lock file: %s\n"):format(err_msg),
-          "Warn"
-        )
-      end
+    if acquired_lock_fd then -- Don't delete the lock if we didn't open it...
+      -- Don't need to yield for this.
+      assert(uv.fs_unlink(lock_path, function(err_msg, ok)
+        if not ok then
+          console:plugin_print(
+            ("Failed to delete build lock: %s\n"):format(err_msg),
+            "Warn"
+          )
+        end
+      end))
     end
   end
+
+  -- Using coroutines here to make the logic seem procedural, to guard against
+  -- callback hell.
+  --
+  -- This approach relies on the fact that asynchronous luv calls are guaranteed
+  -- to happen after at least one event loop tick (:h luv), so there should be
+  -- no case where the callbacks try to resume the coroutine before it yields.
+  local co
 
   --- @param f fun(): fun()?
   --- @return fun(...)
@@ -192,12 +218,17 @@ local function acquire_lock(console, result_cb)
     return coroutine.wrap(function()
       local ok, rv = pcall(f)
 
-      if fd then
-        local close_ok, close_err = uv.fs_close(fd)
+      if retry_timer then
+        retry_timer:close()
+      end
+      if acquired_lock_fd then
+        assert(uv.fs_close(acquired_lock_fd, co))
+        local close_err_msg, close_ok = coroutine.yield()
+
         if not close_ok then
           console:plugin_print(
-            ("Failed to close file descriptor to build lock file: %s\n"):format(
-              close_err
+            ("Failed to close file descriptor to build lock: %s\n"):format(
+              close_err_msg
             ),
             "Warn"
           )
@@ -211,69 +242,232 @@ local function acquire_lock(console, result_cb)
     end)
   end
 
-  -- Using coroutines here to make the logic seem procedural, to guard against
-  -- callback hell.
-  --
-  -- This approach relies on the fact that asynchronous luv calls are guaranteed
-  -- to happen after at least one event loop tick (:h luv), so there should be
-  -- no case where the callbacks try to resume the coroutine before it yields.
+  --- @return integer? lock_pid
+  --- @nodiscard
+  --- @async
+  local function check_lock_valid()
+    assert(uv.fs_open(lock_path, "r", 0, co))
+    local open_err_msg, fd = coroutine.yield()
+    if open_err_msg and not open_err_msg:find "^ENOENT:" then
+      error(
+        ("Failed to read existing build lock file: %s"):format(open_err_msg),
+        0
+      )
+    elseif not fd then
+      return nil
+    end
 
-  local co
+    -- Feels overkill using luv to just read a PID, but the primary reason for
+    -- doing it this way was to ignore ENOENT above and reuse the fd for fstat.
+    local data = ""
+    local ok, rv = pcall(function()
+      -- Before checking the PID, check that the lock was last modified since
+      -- the last boot, otherwise the PID may wrongly map to a running, but
+      -- unrelated process.
+      assert(uv.fs_fstat(fd, co))
+      local stat_err_msg, stat = coroutine.yield()
+      if stat_err_msg then
+        error(
+          ("Failed to stat existing build lock file: %s"):format(stat_err_msg),
+          0
+        )
+      end
+      local boot_time = assert(select(1, uv.gettimeofday()))
+        - assert(uv.uptime())
+      if boot_time > stat.mtime.sec then
+        return false
+      end
+
+      -- libuv pipes to fds are broken and can cause aborts; avoid them.
+      -- Don't bother handling partial reads; don't expect to be reading much.
+      assert(uv.fs_read(fd, stat.size, nil, co))
+      local read_err_msg
+      read_err_msg, data = coroutine.yield()
+      data = data or ""
+      if #data ~= stat.size then
+        read_err_msg = ("Partial read (%d/%d bytes)"):format(#data, stat.size)
+      end
+      if read_err_msg then
+        error(
+          ("Failed to read existing build lock file: %s"):format(read_err_msg),
+          0
+        )
+      end
+
+      return true
+    end)
+
+    -- Don't even bother warning if this fails.
+    assert(uv.fs_close(fd, function() end))
+
+    if not ok then
+      error(rv, 0)
+    elseif not rv then
+      return nil
+    end
+
+    local lock_pid = tonumber(data)
+    if not lock_pid then
+      return nil -- Lock contents are nonsense.
+    end
+
+    -- Using kill to not send a signal, but to instead check whether the process
+    -- is running. If no error, then it definitely is, but if ESRCH, then it
+    -- definitely isn't. This is similar to how Vim/Nvim checks swapfiles.
+    local pid_status, pid_err_msg, pid_err = uv.kill(lock_pid, 0)
+    if not pid_status and pid_err ~= "ESRCH" then
+      error(
+        ("Couldn't determine if build lock owner PID %d is running: %s"):format(
+          lock_pid,
+          pid_err_msg
+        ),
+        0
+      )
+    end
+
+    return pid_status == 0 and lock_pid or nil
+  end
+
+  --- @param prompt string
+  --- @param choices BuildLockChoice[]
+  --- @return integer choice
+  --- @nodiscard
+  --- @async
+  local function ask_user(prompt, choices)
+    -- vim.ui.select may not work within a fast event context.
+    vim.schedule(co)
+    coroutine.yield()
+
+    ui.select(choices, {
+      prompt = prompt,
+      format_item = function(choice)
+        return lock_choice_to_label[choice]
+          .. (choice == choices[1] and " (recommended)" or "")
+      end,
+    }, vim.schedule_wrap(co))
+    local choice, choice_i = coroutine.yield()
+    choice_i = choice_i or 1 -- Default to the first choice.
+
+    if choice == lock_choices.WAIT then
+      console:plugin_print "Waiting for build lock to release...\n"
+    elseif choice == lock_choices.ABORT then
+      error("Cancelled acquiring build lock", 0)
+    elseif choice == lock_choices.IGNORE then
+      console:plugin_print("Building without acquiring a lock!\n", "Warn")
+    elseif choice == lock_choices.DELETE then
+      console:plugin_print("Deleting existing build lock!\n", "Warn")
+
+      assert(uv.fs_unlink(lock_path, vim.schedule_wrap(co)))
+      local unlink_err_msg, unlink_ok = coroutine.yield()
+      if not unlink_ok and not unlink_err_msg:find "^ENOENT:" then
+        error(
+          ("Failed to delete existing build lock: %s"):format(unlink_err_msg),
+          0
+        )
+      end
+    else
+      error "Unhandled choice"
+    end
+
+    return choice
+  end
+
   co = co_wrap(function()
     console:plugin_print(
-      ('Acquiring build lock file at "%s"...\n'):format(lock_path),
+      ('Acquiring build lock at "%s"...\n'):format(lock_path),
       "Debug"
     )
 
     -- Don't want many rebuilds to the same directory happening at once!
     -- Attempt to (atomically!) create the lock file, or fail if it exists.
     -- 420 (blaze it) is octal 644, which is -rw-r--r--.
-    assert(uv.fs_open(lock_path, "wx", 420, co))
-    local open_err
-    open_err, fd = coroutine.yield()
-    if not fd then
-      if open_err:find "^EEXIST:" then
-        -- Lock file already exists! Could check that the process that created
-        -- it is not running (in case it crashed, etc.), but it's not easy to
-        -- read the PID without a race condition (at least without flock).
-        -- TODO: maybe prompt the user or try again?
-        error(
-          (
-            'Build lock file already exists at "%s"; '
-            .. "a rebuild is likely already in-progress!"
-          ):format(lock_path),
-          0
-        )
+    while true do
+      if not api.nvim_buf_is_loaded(console.buf) then
+        error("Console buffer was closed", 0)
+      end
+
+      assert(uv.fs_open(lock_path, "wx", 420, co))
+      local open_err_msg
+      open_err_msg, acquired_lock_fd = coroutine.yield()
+      if acquired_lock_fd then
+        break
+      end
+
+      local ask_msg
+      local ask_choices
+      if open_err_msg:find "^EEXIST:" then
+        -- Lock already exists. Check if it's valid, and ask the user what to
+        -- do next, as we can't easily take over an existing lock without race
+        -- conditions. (At least not with what luv provides)
+        -- TODO: use "flock" executable if available?
+        local check_ok, check_rv = pcall(check_lock_valid)
+        if not check_ok then
+          console:plugin_print(
+            ("Failed to validate existing build lock: %s\n"):format(check_rv),
+            "Warn"
+          )
+
+          ask_msg = "DOOM build lock exists, but its status is unknown; "
+            .. "a build may be in progress elsewhere! "
+          ask_choices =
+            { lock_choices.WAIT, lock_choices.ABORT, lock_choices.IGNORE }
+        elseif check_rv then
+          ask_msg = ("DOOM build still in progress for PID %d! "):format(
+            check_rv
+          )
+          ask_choices =
+            { lock_choices.WAIT, lock_choices.ABORT, lock_choices.IGNORE }
+        else
+          ask_msg = "DOOM build lock exists, but it appears to be stale! "
+          ask_choices = { lock_choices.DELETE, lock_choices.ABORT }
+        end
       else
-        error(
-          ('Failed to create build lock file at "%s": %s'):format(
-            lock_path,
-            open_err
-          ),
-          0
+        console:plugin_print(
+          ("Failed to create build lock: %s\n"):format(open_err_msg),
+          "Warn"
         )
+
+        ask_msg = "Failed to acquire DOOM build lock! "
+        ask_choices = { lock_choices.ABORT, lock_choices.IGNORE }
+      end
+
+      if not retry_timer then
+        local ask_choice = ask_user(ask_msg, ask_choices)
+        if ask_choice == lock_choices.IGNORE then
+          -- Pretend we got the lock, return a no-op release callback.
+          return function() end
+        elseif ask_choice == lock_choices.WAIT then
+          -- Allocate the timer, but retry immediately in case the lock released
+          -- while the user was deciding what to do.
+          retry_timer = assert(uv.new_timer())
+        end
+      else
+        -- Retry after a bit. Not setting the repeat time on the timer to
+        -- schedule the next retry only after we get to this point.
+        assert(retry_timer:start(1500, 0, vim.schedule_wrap(co)))
+        coroutine.yield()
       end
     end
 
-    --- @cast fd integer
-    local pipe = assert(uv.new_pipe())
-    assert(pipe:open(fd))
-    assert(
-      pipe:write(("%d\n%d"):format(uv.os_getpid(), assert(uv.uptime())), co)
-    )
-    local write_err = coroutine.yield()
+    --- @cast acquired_lock_fd integer
+    -- libuv pipes to fds are broken and can cause aborts; avoid them.
+    -- Don't bother handling partial writes; we're not writing much anyway.
+    local data = tostring(uv.os_getpid())
+    assert(uv.fs_write(acquired_lock_fd, data, nil, co))
+    local write_err, written = coroutine.yield()
+    if written ~= #data then
+      write_err = ("Partial write (%d/%d bytes)"):format(written, #data)
+    end
     if write_err then
-      error(("Failed to write to build lock file: %s"):format(write_err), 0)
+      error(("Failed to write to build lock: %s"):format(write_err), 0)
     end
 
-    assert(uv.fs_fsync(fd, co))
+    assert(uv.fs_fsync(acquired_lock_fd, co))
     local sync_err, sync_ok = coroutine.yield()
     if not sync_ok then
       -- Lame, but maybe OK as long as all processes are local.
       console:plugin_print(
-        ("Failed to sync build lock file contents to disk: %s\n"):format(
-          sync_err
-        ),
+        ("Failed to sync build lock contents to disk: %s\n"):format(sync_err),
         "Warn"
       )
     end
@@ -294,7 +488,7 @@ function M.rebuild(console, force, result_cb)
   local finished = false
   local pid_to_process = {} --- @type table<integer, vim.SystemObj>
   local release_lock = function() end
-  local leave_autocmd
+  local finish_augroup
   local out_dir
 
   --- @param ok boolean
@@ -312,10 +506,13 @@ function M.rebuild(console, force, result_cb)
     vim.schedule(function()
       if out_dir then
         console:plugin_print "Cleaning up the temporary build directory...\n"
-        if fn.delete(out_dir, "rf") == -1 then
+
+        local rm_ok, rm_rv = pcall(fs.rm, out_dir, { recursive = true })
+        if not rm_ok then
           console:plugin_print(
-            ('Failed to delete temporary build directory "%s"\n'):format(
-              out_dir
+            ('Failed to delete temporary build directory "%s": %s\n'):format(
+              out_dir,
+              rm_rv
             ),
             "Warn"
           )
@@ -323,8 +520,8 @@ function M.rebuild(console, force, result_cb)
       end
 
       release_lock()
-      if leave_autocmd then
-        api.nvim_del_autocmd(leave_autocmd)
+      if finish_augroup then
+        api.nvim_del_augroup_by_id(finish_augroup)
       end
 
       result_cb(ok, err)
@@ -363,12 +560,29 @@ function M.rebuild(console, force, result_cb)
       return
     end
 
-    leave_autocmd = api.nvim_create_autocmd("VimLeave", {
-      group = augroup,
+    ---@param err any
+    ---@return fun()
+    ---@nodiscard
+    local function finish_autocmd_cb(err)
+      return function()
+        api.nvim_del_augroup_by_id(finish_augroup)
+        finish_augroup = nil
+        finish(false, err)
+      end
+    end
+    finish_augroup =
+      api.nvim_create_augroup(("actually-doom.build."):format(console.buf), {})
+
+    api.nvim_create_autocmd("VimLeave", {
+      group = finish_augroup,
       once = true,
-      callback = function()
-        finish(false, "Nvim is exiting")
-      end,
+      callback = finish_autocmd_cb "Nvim is exiting",
+    })
+    api.nvim_create_autocmd("BufUnload", {
+      group = finish_augroup,
+      once = true,
+      buffer = console.buf,
+      callback = finish_autocmd_cb "Console buffer was closed",
     })
 
     local reason = force and "Rebuild requested" or "Executable out-of-date"
@@ -380,10 +594,12 @@ function M.rebuild(console, force, result_cb)
       )
     )
 
-    local out_dir_err_msg
-    out_dir, out_dir_err_msg = uv.fs_mkdtemp(
+    local out_dir_template =
       fs.joinpath(fs.dirname(fn.tempname()), "actually-doom.nvim.XXXXXX")
-    )
+    assert(uv.fs_mkdtemp(out_dir_template, co))
+    local out_dir_err_msg
+    out_dir_err_msg, out_dir = coroutine.yield(co)
+
     if not out_dir then
       error(
         ("Failed to create temporary build directory: %s"):format(
@@ -507,7 +723,7 @@ function M.rebuild(console, force, result_cb)
 
       local object_name = object_names[compile_object_i]
       console:plugin_print(
-        ('(%d/%d) Building DOOM object file "%s"...\n'):format(
+        ('(%d/%d) Building DOOM object "%s"...\n'):format(
           compile_object_i,
           #object_names,
           object_name
