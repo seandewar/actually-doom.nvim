@@ -36,22 +36,10 @@ do
     if key == ctrl_bs or key == ctrl_n or key == ctrl_o then
       return -- May be used to leave Terminal mode; don't intercept.
     elseif key == ctrl_k then
-      -- Toggle kitty graphics protocol support.
       doom:enable_kitty(not doom.screen:kitty_gfx())
-      doom.console:plugin_print(
-        ("kitty graphics protocol %s\n"):format(
-          doom.screen:kitty_gfx() and "ON" or "OFF"
-        )
-      )
       return "" -- Nom nom nom
     elseif key == ctrl_t then
-      -- Toggle tmux passthrough support.
-      doom.screen.tmux_passthrough = not doom.screen.tmux_passthrough
-      doom.console:plugin_print(
-        ("tmux passthrough %s\n"):format(
-          doom.screen.tmux_passthrough and "ON" or "OFF"
-        )
-      )
+      doom.screen:enable_tmux_passthrough(not doom.screen.tmux_passthrough)
       return "" -- *crunch*
     end
 
@@ -451,13 +439,23 @@ end
 --- @field close fun(Gfx)
 --- @field type string
 
+--- @class (exact) NullGfx: Gfx
+--- @field type string
+local NullGfx = {
+  type = "null",
+}
+
+function NullGfx:close()
+  -- No-op.
+end
+
 --- @class (exact) Screen
 --- @field doom Doom
 --- @field title string?
 --- @field res_x integer
 --- @field res_y integer
 --- @field visible boolean?
---- @field tmux_passthrough boolean?
+--- @field tmux_passthrough boolean
 --- @field gfx Gfx
 --- @field closed boolean?
 ---
@@ -480,11 +478,14 @@ function Screen.new(doom, res_x, res_y)
     doom = doom,
     res_x = res_x,
     res_y = res_y,
+    gfx = NullGfx,
   }, { __index = Screen })
 
-  if os.getenv "TMUX" then
-    doom.console:plugin_print "$TMUX is set; tmux passthrough ON\n"
-    screen.tmux_passthrough = true
+  if doom.play_opts.tmux_passthrough == nil and os.getenv "TMUX" then
+    doom.console:plugin_print("$TMUX set, enabling tmux passthrough\n", "Debug")
+    screen:enable_tmux_passthrough(true)
+  else
+    screen:enable_tmux_passthrough(doom.play_opts.tmux_passthrough)
   end
 
   vim.schedule(function()
@@ -522,7 +523,6 @@ function Screen.new(doom, res_x, res_y)
     screen:goto_win()
   end)
 
-  screen.gfx = require("actually-doom.ui.cell").new(screen)
   return screen
 end
 
@@ -538,6 +538,14 @@ function Screen:close()
       end
     end)
   end
+end
+
+--- @param on boolean
+function Screen:enable_tmux_passthrough(on)
+  self.doom.console:plugin_print(
+    ("tmux passthrough %s\n"):format(on and "ON" or "OFF")
+  )
+  self.tmux_passthrough = on
 end
 
 --- @param gfx Gfx

@@ -1,6 +1,7 @@
 # actually-doom.nvim
 
-_Actually_ play DOOM in Neovim v0.11+ on Linux!
+This ain't some random DOOM Emacs-themed distro; _actually_ play DOOM in Neovim
+v0.11+ on Linux!
 
 <p align="center">
     <img alt="Kitty graphics on" width="54%" src="https://github.com/user-attachments/assets/a20eb1c6-0522-4db7-98a2-3bc86ca6ac67"/>

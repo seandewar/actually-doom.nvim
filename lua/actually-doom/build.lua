@@ -481,13 +481,17 @@ end
 --- @class (exact) RebuildOpts
 --- @field force boolean?
 --- @field ignore_lock boolean?
---- @field result_cb fun(ok: boolean, err: any?)?
 --- @field cc string?
+--- @field result_cb fun(ok: boolean, err: any?)?
 --- @field console Console?
 
 --- @param opts RebuildOpts?
 function M.rebuild(opts)
-  opts = opts or {}
+  opts = vim.tbl_extend(
+    "force",
+    require("actually-doom.config").config.build,
+    opts or {}
+  ) --[[@as RebuildOpts]]
   opts.result_cb = opts.result_cb or function() end
   opts.console = opts.console or require("actually-doom.ui").Console.new()
   local console = assert(opts.console)
@@ -541,6 +545,8 @@ function M.rebuild(opts)
   end
 
   -- I wish Lua had defer... 😔
+  -- TODO: consider adding a general defer/catch+finally wrapper that also
+  -- prints the full backtrace (via xpcall) and dedup the other places too
   local function finish_on_err(...)
     local ok, rv = pcall(...)
     if not ok then

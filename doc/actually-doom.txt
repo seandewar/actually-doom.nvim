@@ -104,18 +104,51 @@ actually-doom.nvim automatically uses passthrough sequences if the `$TMUX`
 environment variable is set, but it can be toggled manually by pressing CTRL-T
 in-game.
 
+
+Your preferences for these settings can be saved by calling
+|actually-doom.setup()| within your |config|.  For example, to always enable
+both kitty graphics and tmux passthrough support, add the following Lua code:
+>lua
+	require("actually-doom").setup {
+		game = {
+			kitty_graphics = true,
+			tmux_passthrough = true,
+		},
+	}
+<
+
 ==============================================================================
 LUA API						*actually-doom-api*
 
 The following APIs can be accessed from `require("actually-doom")`:
 
+setup({config})					*actually-doom.setup()*
+	Configure actually-doom.nvim's defaults.
+
+	NOTE: Calling this function is unnecessary if you are happy with the
+	defaults.
+
+	Parameters: ~
+	• {config}  `(table?)` Optional configuration values:
+		• {game} (`table?`, default: nil)
+		  Default `opts` for |actually-doom.play()|.
+		• {build} (`table?`, default: nil)
+		  Default `opts` for |actually-doom.rebuild()|.
+
 play({opts})					*actually-doom.play()*
-	Play DOOM.
+	Launch a new instance of DOOM.
 
 	Parameters: ~
 	• {opts}  `(table?)` Optional parameters:
 		• {iwad_path} (`string?`, default: nil)
 		  Path of the IWAD file to use.  If nil, select from a menu.
+		• {kitty_graphics} (`boolean?`, default: nil)
+		  If true, enable kitty graphics protocol support.
+		  |actually-doom-kitty|
+		• {tmux_passthrough} (`boolean?`, default: nil)
+		  If true, enable tmux passthrough sequence support.
+		  If nil, it is enabled only if `$TMUX` is set.
+		  |actually-doom-tmux|
 
 rebuild({opts})					*actually-doom.rebuild()*
 	Asynchronously rebuild the DOOM executable. (without playing)

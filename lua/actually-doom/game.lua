@@ -63,6 +63,7 @@ local M = {
 --- @field text string
 
 --- @class (exact) Doom
+--- @field play_opts PlayOpts
 --- @field console Console
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
@@ -378,12 +379,16 @@ function Doom:enable_kitty(on)
   end
 
   if on and not self.screen:kitty_gfx() then
+    self.console:plugin_print "kitty graphics protocol ON\n"
+
     local shm_name = ("/actually-doom:%d"):format(self.process.pid)
     send_frame_shm_name(shm_name)
     self:send_set_config_var("detached_ui", "0")
     self:schedule_check()
     self.screen:set_gfx(require "actually-doom.ui.kitty", shm_name)
-  elseif not on and self.screen:kitty_gfx() then
+  elseif not on and not self.screen:cell_gfx() then
+    self.console:plugin_print "kitty graphics protocol OFF\n"
+
     send_frame_shm_name()
     self:send_set_config_var("detached_ui", "1")
     self:schedule_check()
@@ -414,8 +419,7 @@ end
 --- @param doom Doom
 --- @param exe_path string
 --- @param sock_path string
---- @param iwad_path string
-local function init_process(doom, exe_path, sock_path, iwad_path)
+local function init_process(doom, exe_path, sock_path)
   --- @param console_hl string?
   --- @return fun(err: nil|string, data: string|nil)
   --- @nodiscard
@@ -434,8 +438,9 @@ local function init_process(doom, exe_path, sock_path, iwad_path)
     "-listen",
     sock_path,
     "-iwad",
-    iwad_path,
+    doom.play_opts.iwad_path,
   }, {
+    cwd = fs.dirname(exe_path),
     stdout = new_out_cb(),
     stderr = new_out_cb "Warn",
   }, function(out)
@@ -512,7 +517,8 @@ local function recv_msg_loop(doom, buf)
   )
 
   doom.screen = require("actually-doom.ui").Screen.new(doom, res_x, res_y)
-  doom:send_set_config_var("detached_ui", "1")
+  doom:enable_kitty(doom.play_opts.kitty_graphics)
+
   -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only available
   -- as a modifier for other keys), so use X.
   doom:send_set_config_var("key_fire", "45") -- DOS scancode for x.
@@ -865,11 +871,12 @@ end
 
 --- @param console Console
 --- @param exe_path string
---- @param iwad_path string
+--- @param opts PlayOpts
 --- @return Doom?
-function Doom.run(console, exe_path, iwad_path)
+function Doom.run(console, exe_path, opts)
   local doom = setmetatable({
     console = console,
+    play_opts = opts,
     check_timer = assert(uv.new_timer()),
     send_buf = require("string.buffer").new(256),
     mouse_button_mask = 0,
@@ -893,7 +900,7 @@ function Doom.run(console, exe_path, iwad_path)
     fn.stdpath "run",
     ("actually-doom.%d.%d"):format(uv.os_getpid(), uv.hrtime())
   )
-  close_on_err_quieter(init_process, doom, exe_path, sock_path, iwad_path)
+  close_on_err_quieter(init_process, doom, exe_path, sock_path)
 
   doom:close_on_err(function()
     doom.console:set_doom(doom)
@@ -985,10 +992,16 @@ end
 
 --- @class (exact) PlayOpts
 --- @field iwad_path string?
+--- @field kitty_graphics boolean?
+--- @field tmux_passthrough boolean?
 
 --- @param opts PlayOpts?
 function M.play(opts)
-  opts = opts or {}
+  opts = vim.tbl_extend(
+    "force",
+    require("actually-doom.config").config.game,
+    opts or {}
+  ) --[[@as PlayOpts]]
 
   local function play_iwad()
     if not opts.iwad_path then
@@ -1012,8 +1025,7 @@ function M.play(opts)
           return
         end
 
-        local doom_ok, doom_rv =
-          Doom.run(console, build.exe_install_path, opts.iwad_path)
+        local doom_ok, doom_rv = Doom.run(console, build.exe_install_path, opts)
         if not doom_ok then
           vim.notify(
             ("[actually-doom.nvim] %s"):format(doom_rv),

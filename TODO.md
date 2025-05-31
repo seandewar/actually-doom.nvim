@@ -1,5 +1,4 @@
 # High priority
-- [ ] Plugin configuration.
 - [ ] Clean up the code; address some of the TODOs hanging around before
   release. :)
 
