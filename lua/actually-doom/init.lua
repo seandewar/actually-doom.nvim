@@ -996,28 +996,31 @@ function M.play(iwad_path, result_cb)
 
     local console = require("actually-doom.ui").Console.new()
     local build = require "actually-doom.build"
-    build.rebuild(console, false, function(ok, _)
-      if not ok then
-        local msg = "[actually-doom.nvim] DOOM build failed!"
-        if api.nvim_buf_is_loaded(console.buf) then
-          msg = ('%s See console for details via ":%db!"'):format(
-            msg,
-            console.buf
+    build.rebuild {
+      console = console,
+      result_cb = function(ok, _)
+        if not ok then
+          local msg = "[actually-doom.nvim] DOOM build failed!"
+          if api.nvim_buf_is_loaded(console.buf) then
+            msg = ('%s See console for details via ":%db!"'):format(
+              msg,
+              console.buf
+            )
+          end
+          vim.notify(msg, log.levels.ERROR)
+          return
+        end
+
+        local doom_ok, doom_rv =
+          Doom.run(console, build.exe_install_path, iwad_path)
+        if not doom_ok then
+          vim.notify(
+            "[actually-doom.nvim] " .. tostring(doom_rv),
+            log.levels.ERROR
           )
         end
-        vim.notify(msg, log.levels.ERROR)
-        return
-      end
-
-      local doom_ok, doom_rv =
-        Doom.run(console, build.exe_install_path, iwad_path)
-      if not doom_ok then
-        vim.notify(
-          "[actually-doom.nvim] " .. tostring(doom_rv),
-          log.levels.ERROR
-        )
-      end
-    end)
+      end,
+    }
   end
 
   if iwad_path then

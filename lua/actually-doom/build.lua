@@ -478,12 +478,19 @@ local function acquire_lock(console, result_cb)
   co()
 end
 
---- @param console Console?
---- @param force boolean?
---- @param result_cb fun(ok: boolean, err: any?)?
-function M.rebuild(console, force, result_cb)
-  result_cb = result_cb or function(_) end
-  console = console or require("actually-doom.ui").Console.new()
+--- @class (exact) RebuildOpts
+--- @field force boolean?
+--- @field ignore_lock boolean?
+--- @field result_cb fun(ok: boolean, err: any?)?
+--- @field cc string?
+--- @field console Console?
+
+--- @param opts RebuildOpts?
+function M.rebuild(opts)
+  opts = opts or {}
+  opts.result_cb = opts.result_cb or function() end
+  opts.console = opts.console or require("actually-doom.ui").Console.new()
+  local console = assert(opts.console)
 
   local finished = false
   local pid_to_process = {} --- @type table<integer, vim.SystemObj>
@@ -524,7 +531,12 @@ function M.rebuild(console, force, result_cb)
         api.nvim_del_augroup_by_id(finish_augroup)
       end
 
-      result_cb(ok, err)
+      if ok then
+        console:plugin_print "DOOM build complete!\n"
+      else
+        console:plugin_print("DOOM build failed!\n", "Error")
+      end
+      opts.result_cb(ok, err)
     end)
   end
 
@@ -547,14 +559,16 @@ function M.rebuild(console, force, result_cb)
 
   local co
   co = coroutine.wrap(finish_on_err_wrap(function()
-    acquire_lock(console, vim.schedule_wrap(co))
-    local lock_ok, lock_rv = coroutine.yield()
-    if not lock_ok then
-      error(lock_rv, 0)
+    if not opts.ignore_lock then
+      acquire_lock(console, vim.schedule_wrap(co))
+      local lock_ok, lock_rv = coroutine.yield()
+      if not lock_ok then
+        error(lock_rv, 0)
+      end
+      release_lock = lock_rv
     end
-    release_lock = lock_rv
 
-    if not force and not needs_rebuild() then
+    if not opts.force and not needs_rebuild() then
       console:plugin_print "DOOM executable up-to-date; skipping rebuild\n"
       finish(true)
       return
@@ -585,7 +599,8 @@ function M.rebuild(console, force, result_cb)
       callback = finish_autocmd_cb "Console buffer was closed",
     })
 
-    local reason = force and "Rebuild requested" or "Executable out-of-date"
+    local reason = opts.force and "Rebuild requested"
+      or "Executable out-of-date"
     local parallelism = uv.available_parallelism()
     console:plugin_print(
       ("%s; rebuilding DOOM using %d parallel jobs...\n"):format(
@@ -613,7 +628,7 @@ function M.rebuild(console, force, result_cb)
       "Debug"
     )
 
-    local cc = uv.os_getenv "CC" or "cc"
+    opts.cc = opts.cc or uv.os_getenv "CC" or "cc"
 
     local function install()
       if finished then
@@ -696,7 +711,7 @@ function M.rebuild(console, force, result_cb)
       end
       console:plugin_print "Linking DOOM executable...\n"
 
-      local cmd = { cc }
+      local cmd = { opts.cc }
       vim.list_extend(cmd, cflags)
       vim.list_extend(cmd, {
         "-lc",
@@ -734,7 +749,7 @@ function M.rebuild(console, force, result_cb)
       local src_path = fs.joinpath(src_dir, src_name)
       compile_object_i = compile_object_i + 1
 
-      local cmd = { cc }
+      local cmd = { opts.cc }
       vim.list_extend(cmd, cflags)
       vim.list_extend(cmd, {
         "-c",
@@ -744,7 +759,7 @@ function M.rebuild(console, force, result_cb)
       })
 
       spawn_job(
-        ('compile "%s"'):format(object_name),
+        ("compile '%s'"):format(object_name),
         cmd,
         spawn_next_compile_job
       )
