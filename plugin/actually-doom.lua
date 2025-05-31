@@ -16,7 +16,7 @@ then
 end
 
 api.nvim_create_user_command("Doom", function(...)
-  return require("actually-doom").play_cmd(...)
+  return require("actually-doom.game").play_cmd(...)
 end, {
   desc = "Play DOOM",
   bang = true,

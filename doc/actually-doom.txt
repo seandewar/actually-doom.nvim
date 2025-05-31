@@ -105,6 +105,41 @@ environment variable is set, but it can be toggled manually by pressing CTRL-T
 in-game.
 
 ==============================================================================
+LUA API						*actually-doom-api*
+
+The following APIs can be accessed from `require("actually-doom")`:
+
+play({opts})					*actually-doom.play()*
+	Play DOOM.
+
+	Parameters: ~
+	• {opts}  `(table?)` Optional parameters:
+		• {iwad_path} (`string?`, default: nil)
+		  Path of the IWAD file to use.  If nil, select from a menu.
+
+rebuild({opts})					*actually-doom.rebuild()*
+	Asynchronously rebuild the DOOM executable. (without playing)
+
+	NOTE: Calling this function is not usually necessary, as DOOM is
+	automatically rebuilt before playing if it is out-of-date.
+
+	Parameters: ~
+	• {opts}  `(table?)` Optional parameters:
+		• {force} (`boolean?`, default: nil)
+		  If true, rebuild even if the DOOM executable is up-to-date.
+		• {cc} (`string?`, default: nil)
+		  C compiler executable to use.  If nil, falls back to `$CC`
+		  if defined, otherwise `cc`.
+		• {result_cb} (`fun(ok: boolean, err: any?)?`, default: nil)
+		  Optional function that is called after the rebuild has
+		  finished.  If `ok` is true, then the rebuild completed (or
+		  was skipped) with no error.  If `ok` is false, then the
+		  rebuild failed, and `err` indicates the error.
+		• {ignore_lock} (`boolean?`, default: nil)
+		  If true, rebuild without acquiring a lock.  This may cause
+		  problems if a rebuild is already in progress!
+
+==============================================================================
 HIGHLIGHT GROUPS				*actually-doom-highlights*
 
 The following |:hi-default| definitions exist for use in console buffers:

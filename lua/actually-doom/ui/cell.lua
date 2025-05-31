@@ -2,9 +2,7 @@ local api = vim.api
 local bit = require "bit"
 local fn = vim.fn
 
-local menu_type = require("actually-doom").menu_type
-local intermission_state = require("actually-doom").intermission_state
-local finale_stage = require("actually-doom").finale_stage
+local game = require "actually-doom.game"
 
 local ffi
 do
@@ -185,12 +183,12 @@ local menu_lump_to_label = {
 }
 
 local menu_type_to_header_lines = {
-  [menu_type.NEW_GAME] = "NEW GAME\n\nChoose Skill Level:",
-  [menu_type.EPISODE] = "NEW GAME\n\nWhich Episode?",
-  [menu_type.LOAD_GAME] = "LOAD GAME",
-  [menu_type.SAVE_GAME] = "SAVE GAME",
-  [menu_type.OPTIONS] = "OPTIONS",
-  [menu_type.SOUND] = "OPTIONS\n\nSound Volume:",
+  [game.menu_type.NEW_GAME] = "NEW GAME\n\nChoose Skill Level:",
+  [game.menu_type.EPISODE] = "NEW GAME\n\nWhich Episode?",
+  [game.menu_type.LOAD_GAME] = "LOAD GAME",
+  [game.menu_type.SAVE_GAME] = "SAVE GAME",
+  [game.menu_type.OPTIONS] = "OPTIONS",
+  [game.menu_type.SOUND] = "OPTIONS\n\nSound Volume:",
 }
 
 local pause_label = "Pause"
@@ -440,7 +438,7 @@ function M:refresh(
 
   if intermission and not menu then
     local level_name = assert(doom.automap_title)
-    if intermission.state == intermission_state.STAT_COUNT then
+    if intermission.state == game.intermission_state.STAT_COUNT then
       local start_row = center(9, self.screen.term_height)
       -- Foreground colour to xterm pure white, write level name, restore
       -- foreground to xterm pure red, write label.
@@ -523,7 +521,7 @@ function M:refresh(
   end
   if draw_finale and not menu then
     local text = doom.finale.text:sub(1, finale_text_len)
-    local start_row = doom.finale.stage == finale_stage.CAST
+    local start_row = doom.finale.stage == game.finale_stage.CAST
         and math.max(1, self.screen.term_height - 1)
       or nil
 
@@ -540,7 +538,10 @@ function M:refresh(
     local labels = {}
     local max_label_len = 0
 
-    if menu.type == menu_type.SAVE_GAME or menu.type == menu_type.LOAD_GAME then
+    if
+      menu.type == game.menu_type.SAVE_GAME
+      or menu.type == game.menu_type.LOAD_GAME
+    then
       local vars = menu.vars --[[@as LoadOrSaveGameMenuVars]]
       for i, slot in ipairs(vars.save_slots) do
         labels[i] = ("Slot %d: %s%s"):format(

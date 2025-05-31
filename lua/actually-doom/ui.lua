@@ -60,7 +60,7 @@ do
     local ok, rv = pcall(
       doom.close_on_err,
       doom,
-      require("actually-doom").Doom.press_vim_key,
+      require("actually-doom.game").Doom.press_vim_key,
       doom,
       key
     )

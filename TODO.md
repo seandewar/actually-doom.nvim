@@ -1,7 +1,4 @@
 # High priority
-- [ ] Improve API to take an "opts" table like rebuild() now does, move API to
-  init.lua, but move all the doom-related guts to doom.lua and make the init.lua
-  stuff just a shim that require()s into other modules.
 - [ ] Plugin configuration.
 - [ ] Clean up the code; address some of the TODOs hanging around before
   release. :)
