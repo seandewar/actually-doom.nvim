@@ -1153,11 +1153,32 @@ void D_DoomMain(void)
     if (modifiedgame) {
         // These are the lumps that will be checked in IWAD,
         // if any one is not present, execution will be aborted.
-        char name[23][8] = {"e2m1",   "e2m2",   "e2m3",    "e2m4",   "e2m5",
-                            "e2m6",   "e2m7",   "e2m8",    "e2m9",   "e3m1",
-                            "e3m3",   "e3m3",   "e3m4",    "e3m5",   "e3m6",
-                            "e3m7",   "e3m8",   "e3m9",    "dphoof", "bfgga0",
-                            "heada1", "cybra1", "spida1d1"};
+        char name[23][8] = {"e2m1",
+                            "e2m2",
+                            "e2m3",
+                            "e2m4",
+                            "e2m5",
+                            "e2m6",
+                            "e2m7",
+                            "e2m8",
+                            "e2m9",
+                            "e3m1",
+                            "e3m3",
+                            "e3m3",
+                            "e3m4",
+                            "e3m5",
+                            "e3m6",
+                            "e3m7",
+                            "e3m8",
+                            "e3m9",
+                            "dphoof",
+                            "bfgga0",
+                            "heada1",
+                            "cybra1",
+                            // Quash warning for not having room for NUL when
+                            // using a string literal; lump names can omit NUL
+                            // here if they have length 8.
+                            {'s', 'p', 'i', 'd', 'a', '1', 'd', '1'}};
         int i;
 
         if (gamemode == shareware)

@@ -170,16 +170,19 @@ static void saveg_write_pad(void)
 }
 
 // Pointers
+//
+// These functions make no sense. Firstly, they're used to write function
+// pointers via a cast to a non-NULL data pointer, which is not portable.
+// Secondly, the values don't even seem to be used and are overwritten?
+// Plus, things like PIE will make the values useless anyway...
+// Write a dummy NULL value instead, at least for save compatibility.
+//
+// Make these macros to shut up compiler warnings about converting a function
+// pointer to a data pointer, as we're not actually using the pointer.
+// (and it's fine to convert NULL)
 
-static void *saveg_readp(void)
-{
-    return (void *)(intptr_t)saveg_read32();
-}
-
-static void saveg_writep(void *p)
-{
-    saveg_write32((intptr_t)p);
-}
+#define saveg_readp() ((void)saveg_read32(), NULL)
+#define saveg_writep(p) ((void)p, saveg_write32(0))
 
 // Enum values are 32-bit integers.
 
@@ -243,9 +246,10 @@ static void saveg_read_thinker_t(thinker_t *str)
     str->next = saveg_readp();
 
     // think_t function;
-    // TODO: we shouldn't be serializing pointers at all, let alone function
-    // pointers (converting them to intptr_t is non-portable); plus ASLR exists
-    str->function = saveg_readp();
+    // Compilers may be too dumb to see that we're always setting it to NULL,
+    // which is OK for function pointers, so do it separately.
+    (void)saveg_readp();
+    str->function = NULL;
 }
 
 static void saveg_write_thinker_t(thinker_t *str)
@@ -257,8 +261,6 @@ static void saveg_write_thinker_t(thinker_t *str)
     saveg_writep(str->next);
 
     // think_t function;
-    // TODO: we shouldn't be serializing pointers at all, let alone function
-    // pointers (converting them to intptr_t is non-portable); plus ASLR exists
     saveg_writep(str->function);
 }
 

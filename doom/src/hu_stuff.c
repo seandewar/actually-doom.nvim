@@ -15,6 +15,8 @@
 // DESCRIPTION:  Heads-up displays
 //
 
+#include <assert.h>
+
 #include "hu_stuff.h"
 #include "d_englsh.h"
 #include "doomdef.h"
@@ -150,7 +152,9 @@ void HU_Init(void)
     // load the heads-up font
     j = HU_FONTSTART;
     for (i = 0; i < HU_FONTSIZE; i++) {
-        snprintf(buffer, 9, "STCFN%.3d", j++);
+        int len = snprintf(buffer, 9, "STCFN%.3d", j++);
+        assert(len < 9);
+        (void)len;
         hu_font[i] = (patch_t *)W_CacheLumpName(buffer, PU_STATIC);
     }
 }

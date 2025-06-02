@@ -468,7 +468,9 @@ void M_SaveGame(int choice)
 //
 //      M_QuickSave
 //
-char tempstring[80];
+// Longest string is the load prompt displaying a max-length save slot desc.
+// Only include NUL once in the sizeof values.
+char tempstring[sizeof QLPROMPT - (sizeof "%s" - 1) + (SAVESTRINGSIZE - 1)];
 
 void M_QuickSaveResponse(int key)
 {
@@ -495,7 +497,8 @@ void M_QuickSave(void)
         quickSaveSlot = -2; // means to pick a slot now
         return;
     }
-    snprintf(tempstring, 80, QSPROMPT, savegamestrings[quickSaveSlot]);
+    snprintf(tempstring, sizeof tempstring, QSPROMPT,
+             savegamestrings[quickSaveSlot]);
     M_StartMessage(tempstring, M_QuickSaveResponse, true);
 }
 
@@ -521,7 +524,8 @@ void M_QuickLoad(void)
         M_StartMessage(QSAVESPOT, NULL, false);
         return;
     }
-    snprintf(tempstring, 80, QLPROMPT, savegamestrings[quickSaveSlot]);
+    snprintf(tempstring, sizeof tempstring, QLPROMPT,
+             savegamestrings[quickSaveSlot]);
     M_StartMessage(tempstring, M_QuickLoadResponse, true);
 }
 
@@ -719,7 +723,7 @@ void M_VerifyNightmare(int key)
     if (key != key_menu_confirm)
         return;
 
-    G_DeferedInitNew(nightmare, epi + 1, 1);
+    G_DeferedInitNew(sk_nightmare, epi + 1, 1);
     M_ClearMenus();
 }
 
@@ -1648,7 +1652,11 @@ void M_Drawer(void)
             type = currentMenu == &LoadDef ? DMENU_LOAD_GAME : DMENU_SAVE_GAME;
 
             vars.load_or_save_game.save_slot_count = load_end;
-            vars.load_or_save_game.save_slots = savegamestrings;
+            // Before C23, qualifiers on arrays apply just to the element type,
+            // not the array type. Therefore "const char (*)[X]" and "char
+            // (*)[X]" are not actually compatible types, so we need to cast.
+            vars.load_or_save_game.save_slots =
+                (const char (*)[SAVESTRINGSIZE])savegamestrings;
             vars.load_or_save_game.save_slot_edit_i =
                 saveStringEnter ? saveSlot : -1;
             varsp = &vars;

@@ -114,7 +114,7 @@ local cflags = {
   "-D_GNU_SOURCE",
   "-DNDEBUG",
   "-O3",
-  "-flto",
+  "-flto=auto",
   -- Optimizations are on, but some debug info is useful, just in case.
   "-g",
 }

@@ -17,6 +17,7 @@
 //      set up initial state and misc. LUTs.
 //
 
+#include <assert.h>
 #include <string.h>
 
 #include "doomdef.h"
@@ -699,10 +700,9 @@ void P_SetupLevel(int episode, int map)
 
     // find map name
     if (gamemode == commercial) {
-        if (map < 10)
-            snprintf(lumpname, 9, "map0%i", map);
-        else
-            snprintf(lumpname, 9, "map%i", map);
+        int len = snprintf(lumpname, 9, "map%.2d", map);
+        assert(len < 9);
+        (void)len;
     } else {
         lumpname[0] = 'E';
         lumpname[1] = '0' + episode;

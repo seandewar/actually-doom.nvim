@@ -16,7 +16,7 @@
 //      Refresh of things, i.e. objects represented by sprites.
 //
 
-#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -698,7 +698,9 @@ void R_SortVisSprites(void)
     int count;
     vissprite_t *ds;
     vissprite_t *best;
-    vissprite_t unsorted;
+    // Static to quash compiler warnings about storing the address of a local;
+    // after the sort it should no longer be referenced by the list anyway.
+    static vissprite_t unsorted;
     fixed_t bestscale;
 
     count = vissprite_p - vissprites;
@@ -737,6 +739,8 @@ void R_SortVisSprites(void)
         vsprsortedhead.prev->next = best;
         vsprsortedhead.prev = best;
     }
+
+    assert(unsorted.next == &unsorted && unsorted.prev == &unsorted);
 }
 
 //

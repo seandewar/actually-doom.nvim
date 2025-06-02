@@ -126,10 +126,10 @@ static char frame_shm_name[NAME_MAX];
 static int frame_shm_fd = -1;
 
 // Enough for a whole frame and (a decent amount) of leeway.
-#define COMM_WRITE_BUF_CAP (2 * DOOMGENERIC_SCREEN_BUF_SIZE)
+#define COMM_SEND_BUF_CAP (2 * DOOMGENERIC_SCREEN_BUF_SIZE)
 
 static struct {
-    char data[COMM_WRITE_BUF_CAP];
+    char data[COMM_SEND_BUF_CAP];
     size_t len;
 } comm_send_buf;
 
@@ -297,7 +297,7 @@ static void Comm_FlushSend(boolean closing)
 static void Comm_Write8(uint8_t v)
 {
     assert(comm_writing_msg);
-    if (comm_send_buf.len == COMM_WRITE_BUF_CAP)
+    if (comm_send_buf.len + 1 > COMM_SEND_BUF_CAP)
         Comm_FlushSend(false);
 
     comm_send_buf.data[comm_send_buf.len++] = v;
@@ -306,7 +306,7 @@ static void Comm_Write8(uint8_t v)
 static void Comm_Write16(uint16_t v)
 {
     assert(comm_writing_msg);
-    if (comm_send_buf.len + 2 > COMM_WRITE_BUF_CAP)
+    if (comm_send_buf.len + 2 > COMM_SEND_BUF_CAP)
         Comm_FlushSend(false);
 
     comm_send_buf.data[comm_send_buf.len++] = v & 0xff;
@@ -316,7 +316,7 @@ static void Comm_Write16(uint16_t v)
 static void Comm_Write32(uint32_t v)
 {
     assert(comm_writing_msg);
-    if (comm_send_buf.len + 4 > COMM_WRITE_BUF_CAP)
+    if (comm_send_buf.len + 4 > COMM_SEND_BUF_CAP)
         Comm_FlushSend(false);
 
     comm_send_buf.data[comm_send_buf.len++] = v & 0xff;
@@ -330,7 +330,7 @@ static void Comm_WriteBytes(const byte *p, size_t len)
     assert(comm_writing_msg);
 
     while (true) {
-        size_t free_len = COMM_WRITE_BUF_CAP - comm_send_buf.len;
+        size_t free_len = COMM_SEND_BUF_CAP - comm_send_buf.len;
         size_t copy_len = len <= free_len ? len : free_len;
 
         memcpy(comm_send_buf.data + comm_send_buf.len, p, copy_len);
@@ -1120,7 +1120,9 @@ void DG_OnSetFinaleText(finalestage_t stage, const char *text)
 
 boolean DG_GetInput(input_t *input)
 {
-    uint8_t key, pressed;
+    // Initialize pressed to silence bogus GCC -Wmaybe-uninitialized; we always
+    // push at least two bytes to the key_buf.
+    uint8_t key, pressed = 0;
     if (!Ring_Read8(&key_buf, &key))
         return false;
 

@@ -16,6 +16,7 @@
 //      Intermission screens.
 //
 
+#include <assert.h>
 #include <stdio.h>
 
 #include "doomgeneric.h"
@@ -1335,12 +1336,16 @@ static void WI_loadUnloadData(load_callback_t callback)
 
     if (gamemode == commercial) {
         for (i = 0; i < NUMCMAPS; i++) {
-            snprintf(name, 9, "CWILV%.2d", i);
+            int len = snprintf(name, 9, "CWILV%.2d", i);
+            assert(len < 9);
+            (void)len;
             callback(name, &lnames[i]);
         }
     } else {
         for (i = 0; i < NUMMAPS; i++) {
-            snprintf(name, 9, "WILV%d%d", wbs->epsd, i);
+            int len = snprintf(name, 9, "WILV%d%d", wbs->epsd, i);
+            assert(len < 9);
+            (void)len;
             callback(name, &lnames[i]);
         }
 
@@ -1360,7 +1365,10 @@ static void WI_loadUnloadData(load_callback_t callback)
                     // MONDO HACK!
                     if (wbs->epsd != 1 || j != 8) {
                         // animations
-                        snprintf(name, 9, "WIA%d%.2d%.2d", wbs->epsd, j, i);
+                        int len =
+                            snprintf(name, 9, "WIA%d%.2d%.2d", wbs->epsd, j, i);
+                        assert(len < 9);
+                        (void)len;
                         callback(name, &a->p[i]);
                     } else {
                         // HACK ALERT!
@@ -1439,7 +1447,9 @@ static void WI_loadUnloadData(load_callback_t callback)
         callback(name, &p[i]);
 
         // "1,2,3,4"
-        snprintf(name, 9, "WIBP%d", i + 1);
+        int len = snprintf(name, 9, "WIBP%d", i + 1);
+        assert(len < 9);
+        (void)len;
         callback(name, &bp[i]);
     }
 

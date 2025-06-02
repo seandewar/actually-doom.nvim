@@ -16,7 +16,6 @@
 //     Main loop code.
 //
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "d_event.h"
@@ -297,11 +296,12 @@ boolean D_InitNetGame(net_connect_data_t *connect_data)
     int i;
 #endif
 
+    (void)connect_data;
     // Call D_QuitNetGame on exit:
 
     I_AtExit(D_QuitNetGame, true);
 
-    player_class = connect_data->player_class;
+    // player_class = connect_data->player_class;
 
 #ifdef FEATURE_MULTIPLAYER
 

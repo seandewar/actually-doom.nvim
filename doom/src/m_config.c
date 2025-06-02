@@ -1715,7 +1715,7 @@ static int ParseIntParameter(char *strparm)
     int parm;
 
     if (strparm[0] == '0' && strparm[1] == 'x')
-        sscanf(strparm + 2, "%x", &parm);
+        sscanf(strparm + 2, "%x", (unsigned int *)&parm);
     else
         sscanf(strparm, "%i", &parm);
 
