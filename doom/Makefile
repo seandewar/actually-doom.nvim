@@ -1,9 +1,14 @@
-CFLAGS += -std=c99 -Wall -Wextra -Wpedantic -g \
-          -D_POSIX_C_SOURCE=199309 -D_GNU_SOURCE
-LDFLAGS += -Wl,--gc-sections
-LDLIBS += -lm -lc
+# actually-doom.nvim can already build DOOM by itself without a Makefile, but
+# this Makefile is useful for building a debug version of DOOM while keeping the
+# object files.
+#
+# Just set $OUTDIR appropriately at the command line when invoking make.
+# You may need to run "make clean" first if an executable already exists there.
 
-OUTDIR := build
+CFLAGS += -std=c99 -Wall -Wextra -Wpedantic -g3 \
+          -D_POSIX_C_SOURCE=199309 -D_GNU_SOURCE
+LDLIBS += -lm -lc
+OUTDIR ?= build
 
 OBJS := am_map.o doomstat.o dstrings.o d_event.o d_items.o d_iwad.o \
         d_loop.o d_main.o d_mode.o d_net.o f_finale.o f_wipe.o g_game.o \
@@ -18,8 +23,10 @@ OBJS := am_map.o doomstat.o dstrings.o d_event.o d_items.o d_iwad.o \
         wi_stuff.o w_checksum.o w_file.o w_main.o w_wad.o z_zone.o \
         w_file_stdc.o i_input.o i_video.o doomgeneric.o doomgeneric_actually.o
 
-OBJS := $(addprefix $(OUTDIR)/,$(OBJS))
-OUTPUT := $(OUTDIR)/actually_doom
+OBJDIR := $(OUTDIR)/objects
+OBJS := $(addprefix $(OBJDIR)/,$(OBJS))
+
+OUTPUT := $(OUTDIR)/actually-doom
 
 .PHONY: all clean
 .DELETE_ON_ERROR:
@@ -27,14 +34,14 @@ OUTPUT := $(OUTDIR)/actually_doom
 all: $(OUTPUT)
 
 clean:
-	$(RM) -r $(OUTDIR)
+	$(RM) -r $(OBJDIR) $(OUTPUT)
 
-$(OUTDIR):
-	mkdir -p $(OUTDIR)
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
-$(OBJS): | $(OUTDIR)
+$(OBJS): | $(OBJDIR)
 
-$(OUTDIR)/%.o: src/%.c
+$(OBJDIR)/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OUTPUT): $(OBJS)

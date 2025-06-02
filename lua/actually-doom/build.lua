@@ -14,12 +14,12 @@ local M = {
   ),
 }
 
-local script_dir = (function()
-  return fs.dirname(fs.abspath(debug.getinfo(2, "S").source:sub(2)))
+local script_path = (function()
+  return fs.abspath(debug.getinfo(2, "S").source:sub(2))
 end)()
 
 local src_dir = fs.normalize(
-  fs.joinpath(script_dir, "../../doom/src"),
+  fs.joinpath(script_path, "../../../doom/src"),
   { expand_env = false }
 )
 
@@ -112,9 +112,11 @@ local cflags = {
   "-Wpedantic",
   "-D_POSIX_C_SOURCE=199309",
   "-D_GNU_SOURCE",
-  "-g",
+  "-DNDEBUG",
   "-O3",
   "-flto",
+  -- Optimizations are on, but some debug info is useful, just in case.
+  "-g",
 }
 
 --- @return boolean
@@ -135,31 +137,43 @@ local function needs_rebuild()
     return true -- Executable does not exist.
   end
 
+  --- @param path string
+  --- @return boolean
+  --- @nodiscard
+  local function check_newer(path)
+    local stat, stat_err_msg = uv.fs_stat(path)
+    if not stat then
+      error(
+        ('Unexpected stat error while checking "%s": %s'):format(
+          path,
+          stat_err_msg
+        ),
+        0
+      )
+    end
+
+    -- If the source file is newer than the executable, then we need a rebuild.
+    return stat.mtime.sec > exe_stat.mtime.sec
+      or (
+        stat.mtime.sec == exe_stat.mtime.sec
+        and stat.mtime.nsec >= exe_stat.mtime.nsec
+      )
+  end
+
+  -- If this script was modified, then it's probably a good idea to rebuild.
+  if check_newer(script_path) then
+    return true
+  end
+
   -- Executable exists, but may be out-of-date. Compare its last modification
   -- time against that of its source and header files.
   for name, type in fs.dir(src_dir) do
-    if type == "file" and (name:find "%.c$" or name:find "%.h$") then
-      local path = fs.joinpath(src_dir, name)
-      local stat, stat_err_msg = uv.fs_stat(path)
-      if not stat then
-        error(
-          ('Unexpected stat error while checking "%s": %s'):format(
-            path,
-            stat_err_msg
-          ),
-          0
-        )
-      end
-
-      if
-        stat.mtime.sec > exe_stat.mtime.sec
-        or (
-          stat.mtime.sec == exe_stat.mtime.sec
-          and stat.mtime.nsec >= exe_stat.mtime.nsec
-        )
-      then
-        return true -- Source file is newer; should rebuild.
-      end
+    if
+      type == "file"
+      and (name:find "%.c$" or name:find "%.h$")
+      and check_newer(fs.joinpath(src_dir, name))
+    then
+      return true
     end
   end
 
