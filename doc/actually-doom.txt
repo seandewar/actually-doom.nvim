@@ -160,9 +160,22 @@ rebuild({opts})					*actually-doom.rebuild()*
 	• {opts}  `(table?)` Optional parameters:
 		• {force} (`boolean?`, default: nil)
 		  If true, rebuild even if the DOOM executable is up-to-date.
-		• {cc} (`string?`, default: nil)
-		  C compiler executable to use.  If nil, falls back to `$CC`
-		  if defined, otherwise `cc`.
+		• {cc} (`string|table|nil`, default: nil)
+		  C compiler to use.  If string, it is the name of the
+		  compiler executable.  If nil, falls back to `$CC` if
+		  defined, otherwise `cc`.  It is assumed the compiler
+		  understands GCC/Clang-style command line arguments; if not,
+		  then it can be set to a table with the following fields:
+			• {compile_cmd} (`fun(src_path: string, object_name: string): string[]`)
+			  Function called with the path of the source file to
+			  compile and the name of the object file to produce.
+			  Must return a |vim.system()|-style `{cmd}` used to
+			  build the object file.
+			• {link_cmd} (`fun(object_names: string[], exe_name: string): string[]`)
+			  Function called with a list of object file names to
+			  link and the name of the DOOM executable to produce.
+			  Must return a |vim.system()|-style `{cmd}` used to
+			  link the object files into the exectuable.
 		• {result_cb} (`fun(ok: boolean, err: any?)?`, default: nil)
 		  Optional function that is called after the rebuild has
 		  finished.  If `ok` is true, then the rebuild completed (or

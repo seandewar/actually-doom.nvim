@@ -105,20 +105,6 @@ local object_names = {
   "doomgeneric_actually.o",
 }
 
-local cflags = {
-  "-std=c99",
-  "-Wall",
-  "-Wextra",
-  "-Wpedantic",
-  "-D_POSIX_C_SOURCE=199309",
-  "-D_GNU_SOURCE",
-  "-DNDEBUG",
-  "-O3",
-  "-flto=auto",
-  -- Optimizations are on, but some debug info is useful, just in case.
-  "-g",
-}
-
 --- @return boolean
 --- @nodiscard
 local function needs_rebuild()
@@ -492,10 +478,14 @@ local function acquire_lock(console, result_cb)
   co()
 end
 
+--- @class (exact) CCompiler
+--- @field compile_cmd fun(src_path: string, object_name: string): string[]
+--- @field link_cmd fun(object_names: string[], exe_name: string): string[]
+
 --- @class (exact) RebuildOpts
 --- @field force boolean?
 --- @field ignore_lock boolean?
---- @field cc string?
+--- @field cc string|CCompiler|nil
 --- @field result_cb fun(ok: boolean, err: any?)?
 --- @field console Console?
 
@@ -508,7 +498,53 @@ function M.rebuild(opts)
   ) --[[@as RebuildOpts]]
   opts.result_cb = opts.result_cb or function() end
   opts.console = opts.console or require("actually-doom.ui").Console.new()
-  local console = assert(opts.console)
+  local console = opts.console --[[@as Console]]
+
+  opts.cc = opts.cc or uv.os_getenv "CC" or "cc"
+  if type(opts.cc) == "string" then
+    local cmd_with_cflags = { opts.cc }
+    if opts.cc == "zig" then
+      cmd_with_cflags[#cmd_with_cflags + 1] = "cc"
+    end
+    vim.list_extend(cmd_with_cflags, {
+      "-std=c99",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-D_POSIX_C_SOURCE=199309",
+      "-D_GNU_SOURCE",
+      "-DNDEBUG",
+      "-O3",
+      "-flto=auto",
+      -- Optimizations are on, but some debug info is useful, just in case.
+      "-g",
+    })
+
+    opts.cc = {
+      compile_cmd = function(src_path, object_name)
+        local cmd = vim.deepcopy(cmd_with_cflags)
+        vim.list_extend(cmd, {
+          "-c",
+          src_path,
+          "-o",
+          object_name,
+        })
+        return cmd
+      end,
+
+      link_cmd = function(objects, exe_name)
+        local cmd = vim.deepcopy(cmd_with_cflags)
+        vim.list_extend(cmd, {
+          "-lc",
+          "-lm",
+          "-o",
+          exe_name,
+        })
+        vim.list_extend(cmd, objects)
+        return cmd
+      end,
+    }
+  end
 
   local finished = false
   local pid_to_process = {} --- @type table<integer, vim.SystemObj>
@@ -648,8 +684,6 @@ function M.rebuild(opts)
       "Debug"
     )
 
-    opts.cc = opts.cc or uv.os_getenv "CC" or "cc"
-
     local function install()
       if finished then
         return
@@ -729,19 +763,13 @@ function M.rebuild(opts)
       if finished then
         return
       end
+
       console:plugin_print "Linking DOOM executable...\n"
-
-      local cmd = { opts.cc }
-      vim.list_extend(cmd, cflags)
-      vim.list_extend(cmd, {
-        "-lc",
-        "-lm",
-        "-o",
-        "actually-doom",
-      })
-      vim.list_extend(cmd, object_names)
-
-      spawn_job("link", cmd, vim.schedule_wrap(finish_on_err_wrap(install)))
+      spawn_job(
+        "link",
+        opts.cc.link_cmd(object_names, "actually-doom"),
+        vim.schedule_wrap(finish_on_err_wrap(install))
+      )
     end
 
     local compile_object_i = 1
@@ -769,18 +797,9 @@ function M.rebuild(opts)
       local src_path = fs.joinpath(src_dir, src_name)
       compile_object_i = compile_object_i + 1
 
-      local cmd = { opts.cc }
-      vim.list_extend(cmd, cflags)
-      vim.list_extend(cmd, {
-        "-c",
-        src_path,
-        "-o",
-        object_name,
-      })
-
       spawn_job(
         ("compile '%s'"):format(object_name),
-        cmd,
+        opts.cc.compile_cmd(src_path, object_name),
         spawn_next_compile_job
       )
     end
