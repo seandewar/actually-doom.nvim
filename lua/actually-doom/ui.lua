@@ -248,18 +248,9 @@ api.nvim_set_hl(0, "DoomConsoleDebug", {
   link = "Comment",
 })
 
---- @class (exact) HlExtmark
---- @field id integer
---- @field hl string
---- @field start_row integer 0-indexed.
---- @field start_col integer 0-indexed.
-
 --- @class (exact) Console
 --- @field doom Doom?
 --- @field buf integer
---- @field last_row integer 0-indexed.
---- @field last_col integer 0-indexed.
---- @field last_extmark HlExtmark?
 --- @field close_autocmd integer?
 ---
 --- @field new function
@@ -352,66 +343,61 @@ function Console:print(text, console_hl)
   if not api.nvim_buf_is_loaded(self.buf) then
     return
   end
+  console_hl = console_hl and ("DoomConsole" .. console_hl) or nil
 
   -- Avoid side-effects, particularly from OptionSet.
   vim._with({ noautocmd = true }, function()
     api.nvim_set_option_value("modifiable", true, { buf = self.buf })
   end)
 
-  if self.last_row >= api.nvim_buf_line_count(self.buf) then
-    -- Some contents were deleted for some reason. Reset the previous position
-    -- values to avoid errors when setting extmarks.
-    -- TODO: screw it, just query the last extmark and extend it via the API
-    self.last_row = 0
-    self.last_col = 0
+  -- Previously we cached the details of the last extmark and the position of
+  -- end of the buffer, but as it's possible for those to be invalidated (e.g:
+  -- naughty plugins messing with the buffer), it's easier to just not do that.
+  local last_line_row = math.max(0, api.nvim_buf_line_count(self.buf) - 1)
+  local last_line_len
+  local hl_extmark
+
+  if console_hl then
+    last_line_len = #api.nvim_buf_get_lines(self.buf, -2, -1, true)[1]
+    hl_extmark =
+      api.nvim_buf_get_extmarks(self.buf, ns, -1, { last_line_row, 0 }, {
+        limit = 1,
+        type = "highlight",
+        details = true,
+      })[1] --[[@as vim.api.keyset.get_extmark_item?]]
+    if
+      hl_extmark
+      and (
+        hl_extmark[4].end_col ~= last_line_len
+        or hl_extmark[4].hl_group ~= console_hl
+      )
+    then
+      hl_extmark = nil -- Extmark not at the end of the buffer.
+    end
   end
 
   local lines = vim.split(text, "\n", { plain = true })
   api.nvim_buf_set_text(self.buf, -1, -1, -1, -1, lines)
+  local new_last_line_row = math.max(0, api.nvim_buf_line_count(self.buf) - 1)
 
-  -- Faster than using the API, line() or col().
-  local prev_last_row = self.last_row
-  local prev_last_col = self.last_col
-  if #lines == 1 then
-    self.last_col = self.last_col + #lines[1]
-  elseif #lines > 1 then
-    self.last_row = self.last_row + (#lines - 1)
-    self.last_col = #lines[#lines]
-  end
-
-  console_hl = console_hl and ("DoomConsole" .. console_hl) or nil
-  if self.last_extmark and self.last_extmark.hl == console_hl then
-    -- Same highlight as the last extmark; extend its range.
-    api.nvim_buf_set_extmark(
-      self.buf,
-      ns,
-      self.last_extmark.start_row,
-      self.last_extmark.start_col,
-      {
-        id = self.last_extmark.id,
+  if hl_extmark or console_hl then
+    local new_last_line_len = #api.nvim_buf_get_lines(self.buf, -2, -1, true)[1]
+    if hl_extmark then
+      -- Same highlight as the last extmark; extend its range.
+      api.nvim_buf_set_extmark(self.buf, ns, hl_extmark[2], hl_extmark[3], {
+        id = hl_extmark[1],
         hl_group = console_hl,
-        end_row = self.last_row,
-        end_col = self.last_col,
-      }
-    )
-  elseif console_hl then
-    -- Last extmark has a different highlight or doesn't exist; can't reuse it.
-    local id =
-      api.nvim_buf_set_extmark(self.buf, ns, prev_last_row, prev_last_col, {
-        hl_group = console_hl,
-        end_row = self.last_row,
-        end_col = self.last_col,
+        end_row = new_last_line_row,
+        end_col = new_last_line_len,
       })
-
-    self.last_extmark = {
-      id = id,
-      hl = console_hl,
-      start_row = prev_last_row,
-      start_col = prev_last_col,
-    }
-  else
-    -- No extmark required if not highlighting.
-    self.last_extmark = nil
+    else
+      -- Last extmark has different highlight or doesn't exist; can't reuse it.
+      api.nvim_buf_set_extmark(self.buf, ns, last_line_row, last_line_len, {
+        hl_group = console_hl,
+        end_row = new_last_line_row,
+        end_col = new_last_line_len,
+      })
+    end
   end
 
   vim._with({ noautocmd = true }, function()
@@ -421,8 +407,8 @@ function Console:print(text, console_hl)
   -- Tail console windows on the last line to the output.
   for _, win in ipairs(fn.win_findbuf(self.buf)) do
     local row, col = unpack(api.nvim_win_get_cursor(win))
-    if row == self.last_row + 1 then
-      api.nvim_win_set_cursor(win, { self.last_row + 1, col })
+    if row == last_line_row + 1 then
+      api.nvim_win_set_cursor(win, { new_last_line_row + 1, col })
     end
   end
 end
