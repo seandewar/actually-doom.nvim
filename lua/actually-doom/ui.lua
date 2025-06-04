@@ -348,9 +348,12 @@ function Console:print(text, console_hl)
   console_hl = console_hl and ("DoomConsole" .. console_hl) or nil
 
   -- Avoid side-effects, particularly from OptionSet.
-  vim._with({ noautocmd = true }, function()
-    api.nvim_set_option_value("modifiable", true, { buf = self.buf })
-  end)
+  -- Not using vim._with here to avoid breakage when it graduates. Also not
+  -- saving/restoring &eventignore as I can't be bothered to handle the
+  -- possibility of Lua errors bailing out before restoring it. I'm lazy >:(
+  api.nvim_command(
+    ("noautocmd call setbufvar(%d, '&modifiable', 1)"):format(self.buf)
+  )
 
   -- Previously we cached the details of the last extmark and the position of
   -- end of the buffer, but as it's possible for those to be invalidated (e.g:
@@ -402,14 +405,15 @@ function Console:print(text, console_hl)
     end
   end
 
-  vim._with({ noautocmd = true }, function()
-    api.nvim_set_option_value("modifiable", false, { buf = self.buf })
-  end)
+  api.nvim_command(
+    ("noautocmd call setbufvar(%d, '&modifiable', 0)"):format(self.buf)
+  )
 
   -- Tail console windows on the last line to the output.
   for _, win in ipairs(fn.win_findbuf(self.buf)) do
     local row, col = unpack(api.nvim_win_get_cursor(win))
     if row == last_line_row + 1 then
+      -- TODO: why isn't this scrolling when non-current? It should be!
       api.nvim_win_set_cursor(win, { new_last_line_row + 1, col })
     end
   end
