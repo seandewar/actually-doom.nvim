@@ -350,11 +350,12 @@ do
       end
     end
 
+    -- TODO: this doesn't work well for the plasma gun or chain gun...
     self:press_key {
       key = dkey,
       shift = shift,
       alt = alt,
-      release_time = uv.now() + 350,
+      release_time = uv.now() + 375,
     }
     self:schedule_check()
     return "" -- We handled the key, so eat it (yum!)
