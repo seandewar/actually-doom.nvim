@@ -3,8 +3,6 @@
   release. :)
 
 # Medium Priority
-- [ ] Add an alternative implementation of the "string.buffer" library to
-  support Nvims lacking LuaJIT.
 - [ ] Implement music, maybe in the executable.
 - [ ] When Nvim gets kitty key press/release detection support, use that (or
   possibly make the executable listen for it, but that might be hard under

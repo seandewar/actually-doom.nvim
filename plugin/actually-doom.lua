@@ -2,14 +2,9 @@ local api = vim.api
 local fn = vim.fn
 local log = vim.log
 
-if
-  fn.has "nvim-0.11" == 0
-  or fn.has "linux" == 0
-  or not pcall(require, "string.buffer")
-then
+if fn.has "nvim-0.11" == 0 or fn.has "linux" == 0 then
   vim.notify(
-    '[actually-doom.nvim] Nvim v0.11+ on Linux with "string.buffer" library '
-      .. "support is required",
+    "[actually-doom.nvim] Nvim v0.11+ on Linux is required",
     log.levels.ERROR
   )
   return

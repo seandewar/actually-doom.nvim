@@ -12,7 +12,7 @@ v0.11+ on Linux!
 
 ## Prerequisites
 
-- [Neovim](https://neovim.io/) v0.11+ built with [LuaJIT](https://luajit.org/luajit.html) support (check `:version`).
+- [Neovim](https://neovim.io/) v0.11+.
 - Linux.
 - C compiler with support for the [C99 standard](https://en.wikipedia.org/wiki/C99).
 

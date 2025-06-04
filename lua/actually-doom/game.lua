@@ -6,6 +6,8 @@ local log = vim.log
 local ui = vim.ui
 local uv = vim.uv
 
+local strbuf = require "actually-doom.strbuf"
+
 local M = {
   --- @enum MenuType
   menu_type = {
@@ -67,7 +69,7 @@ local M = {
 --- @field console Console
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
---- @field send_buf string.buffer
+--- @field send_buf StrBuf
 --- @field check_timer uv.uv_timer_t
 --- @field check_scheduled boolean?
 --- @field pressed_key PressedKey?
@@ -83,9 +85,9 @@ local M = {
 --- @field run function
 local Doom = {}
 
---- @param buf string.buffer
+--- @param buf StrBuf
 --- @param s string
---- @return string.buffer
+--- @return StrBuf
 local function put_string(buf, s)
   assert(#s <= 0xffff)
   return buf:put(
@@ -397,7 +399,7 @@ function Doom:enable_kitty(on)
 end
 
 function Doom:flush_send()
-  if #self.send_buf == 0 then
+  if self.send_buf:len() == 0 then
     return
   end
 
@@ -466,13 +468,13 @@ end
 
 --- @async
 --- @param doom Doom
---- @param buf string.buffer
+--- @param buf StrBuf
 local function recv_msg_loop(doom, buf)
   --- @param n integer (0 gives an empty string)
   --- @return string
   --- @nodiscard
   local function read_bytes(n)
-    while n > #buf do
+    while n > buf:len() do
       coroutine.yield()
     end
     return buf:get(n)
@@ -825,7 +827,7 @@ local function init_connection(doom, sock_path)
     end
 
     doom.console:plugin_print "Connected to the DOOM process\n"
-    local recv_buf = require("string.buffer").new(256)
+    local recv_buf = strbuf.new(256)
     local recv_co = coroutine.create(recv_msg_loop)
     -- Pass the initial arguments.
     assert(coroutine.resume(recv_co, doom, recv_buf))
@@ -878,7 +880,7 @@ function Doom.run(console, exe_path, opts)
     console = console,
     play_opts = opts,
     check_timer = assert(uv.new_timer()),
-    send_buf = require("string.buffer").new(256),
+    send_buf = strbuf.new(256),
     mouse_button_mask = 0,
     game_msg = "",
     menu_msg = "",

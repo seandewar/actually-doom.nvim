@@ -2,12 +2,14 @@ local api = vim.api
 local fn = vim.fn
 local log = vim.log
 
+local strbuf = require "actually-doom.strbuf"
+
 local M = {
   --- @type table<integer, Doom>
   screen_buf_to_doom = {},
   -- Scratch buffer for holding temporary data to be used for various purposes.
   -- It lives at this scope so the allocated space can be re-used.
-  scratch_buf = require("string.buffer").new(),
+  scratch_buf = strbuf.new(),
 }
 
 local ns = api.nvim_create_namespace "actually-doom"

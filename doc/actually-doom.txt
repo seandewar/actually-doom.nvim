@@ -10,8 +10,7 @@ PREREQUISITES					*actually-doom-prerequisites*
 
 To use this plugin, the following is required:
 
-- Neovim v0.11+ with the LuaJIT `string.buffer` library. (Available in typical
-  Neovim installations)
+- Neovim v0.11+.
 - Linux.
 - C compiler with support for the C99 standard.
 
