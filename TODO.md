@@ -1,5 +1,4 @@
 # High priority
-- [ ] Check that this actually works with PUC Lua lol
 
 # Medium Priority
 - [ ] Clean up the code; address some of the TODOs hanging around before
@@ -11,7 +10,8 @@
   DOOM buffer has focus; otherwise ignore the keypresses))
 
 # Low Priority
-- [ ] Maybe move terminal rendering and pixel blending to the executable if
-  performance is bad. (Actually the bottleneck seems to be nvim_chan_send itself
-  and "true colour" handling; not much we can do about that I guess?)
+- [ ] Maybe move terminal rendering to the executable for performance reasons;
+  things are fine under LuaJIT (as the bottleneck if nvim_chan_send; not much we
+  can probably do there), but under PUC the drawing code takes a lot of time;
+  most Nvim's won't be using PUC anyway...
 - [ ] Support other platforms: Windows, Mac, BSDs, etc.?

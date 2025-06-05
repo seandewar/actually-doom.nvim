@@ -10,7 +10,8 @@ PREREQUISITES					*actually-doom-prerequisites*
 
 To use this plugin, the following is required:
 
-- Neovim v0.11+.
+- Neovim v0.11+. (LuaJIT support is recommended for performance reasons, but
+  not required; check `:version`)
 - Linux.
 - C compiler with support for the C99 standard.
 
@@ -80,8 +81,9 @@ CTRL-T			Toggle tmux passthrough support. |actually-doom-tmux|
 ==============================================================================
 KITTY GRAPHICS PROTOCOL				*actually-doom-kitty*
 
-Though optional, the game is best experienced in a terminal that implements
-the kitty graphics protocol with support for Unicode placeholders.
+Though optional, for increased performance and visual clarity, the game is
+best experienced in a terminal that implements the kitty graphics protocol
+with support for Unicode placeholders.
 (https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
 In a supported terminal, it can be toggled in-game by pressing CTRL-K.
@@ -103,6 +105,7 @@ actually-doom.nvim automatically uses passthrough sequences if the `$TMUX`
 environment variable is set, but it can be toggled manually by pressing CTRL-T
 in-game.
 
+------------------------------------------------------------------------------
 
 Your preferences for these settings can be saved by calling
 |actually-doom.setup()| within your |config|.  For example, to always enable
@@ -114,7 +117,6 @@ both kitty graphics and tmux passthrough support, add the following Lua code:
 			tmux_passthrough = true,
 		},
 	}
-<
 
 ==============================================================================
 LUA API						*actually-doom-api*

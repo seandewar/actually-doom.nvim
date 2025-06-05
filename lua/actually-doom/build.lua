@@ -166,6 +166,19 @@ local function needs_rebuild()
   return false
 end
 
+--- @param co thread
+--- @return boolean, any ...
+--- @async
+local function yield_until_dead(co, ...)
+  while true do
+    local ok, rv = coroutine.resume(co, ...)
+    if coroutine.status(co) == "dead" then
+      return ok, rv
+    end
+    coroutine.yield()
+  end
+end
+
 --- @enum BuildLockChoice
 local lock_choices = {
   WAIT = 1,
@@ -206,47 +219,46 @@ local function acquire_lock(console, result_cb)
   -- Using coroutines here to make the logic seem procedural, to guard against
   -- callback hell.
   --
+  -- Not using coroutine.wrap + pcall as that doesn't work across a yield in PUC
+  -- 5.1. Must check coroutine status to make sure the coroutine is actually
+  -- finished before cleaning up.
+  --
   -- This approach relies on the fact that asynchronous luv calls are guaranteed
   -- to happen after at least one event loop tick (:h luv), so there should be
   -- no case where the callbacks try to resume the coroutine before it yields.
   local co
+  local function resume_co(...)
+    local ok, rv = coroutine.resume(co, ...)
+    if coroutine.status(co) ~= "dead" then
+      return
+    end
 
-  --- @param f fun(): fun()?
-  --- @return fun(...)
-  --- @nodiscard
-  local function co_wrap(f)
-    return coroutine.wrap(function()
-      local ok, rv = pcall(f)
-
-      if retry_timer then
-        retry_timer:close()
+    if retry_timer then
+      retry_timer:close()
+    end
+    if acquired_lock_fd then
+      local close_ok, close_err_msg = uv.fs_close(acquired_lock_fd)
+      if not close_ok then
+        console:plugin_print(
+          ("Failed to close file descriptor to build lock: %s\n"):format(
+            close_err_msg
+          ),
+          "Warn"
+        )
       end
-      if acquired_lock_fd then
-        assert(uv.fs_close(acquired_lock_fd, co))
-        local close_err_msg, close_ok = coroutine.yield()
+    end
+    if not ok then
+      release_lock()
+    end
 
-        if not close_ok then
-          console:plugin_print(
-            ("Failed to close file descriptor to build lock: %s\n"):format(
-              close_err_msg
-            ),
-            "Warn"
-          )
-        end
-      end
-      if not ok then
-        release_lock()
-      end
-
-      result_cb(ok, rv)
-    end)
+    result_cb(ok, rv)
   end
 
   --- @return integer? lock_pid
   --- @nodiscard
   --- @async
   local function check_lock_valid()
-    assert(uv.fs_open(lock_path, "r", 0, co))
+    assert(uv.fs_open(lock_path, "r", 0, resume_co))
     local open_err_msg, fd = coroutine.yield()
     if open_err_msg and not open_err_msg:find "^ENOENT:" then
       error(
@@ -260,11 +272,11 @@ local function acquire_lock(console, result_cb)
     -- Feels overkill using luv to just read a PID, but the primary reason for
     -- doing it this way was to ignore ENOENT above and reuse the fd for fstat.
     local data = ""
-    local ok, rv = pcall(function()
+    local check_existing_co = coroutine.create(function()
       -- Before checking the PID, check that the lock was last modified since
       -- the last boot, otherwise the PID may wrongly map to a running, but
       -- unrelated process.
-      assert(uv.fs_fstat(fd, co))
+      assert(uv.fs_fstat(fd, resume_co))
       local stat_err_msg, stat = coroutine.yield()
       if stat_err_msg then
         error(
@@ -280,7 +292,7 @@ local function acquire_lock(console, result_cb)
 
       -- libuv pipes to fds are broken and can cause aborts; avoid them.
       -- Don't bother handling partial reads; don't expect to be reading much.
-      assert(uv.fs_read(fd, stat.size, nil, co))
+      assert(uv.fs_read(fd, stat.size, nil, resume_co))
       local read_err_msg
       read_err_msg, data = coroutine.yield()
       data = data or ""
@@ -296,6 +308,7 @@ local function acquire_lock(console, result_cb)
 
       return true
     end)
+    local ok, rv = yield_until_dead(check_existing_co)
 
     -- Don't even bother warning if this fails.
     assert(uv.fs_close(fd, function() end))
@@ -335,7 +348,7 @@ local function acquire_lock(console, result_cb)
   --- @async
   local function ask_user(prompt, choices)
     -- vim.ui.select may not work within a fast event context.
-    vim.schedule(co)
+    vim.schedule(resume_co)
     coroutine.yield()
 
     ui.select(choices, {
@@ -344,7 +357,7 @@ local function acquire_lock(console, result_cb)
         return lock_choice_to_label[choice]
           .. (choice == choices[1] and " (recommended)" or "")
       end,
-    }, vim.schedule_wrap(co))
+    }, vim.schedule_wrap(resume_co))
     local choice, choice_i = coroutine.yield()
     choice_i = choice_i or 1 -- Default to the first choice.
 
@@ -357,7 +370,7 @@ local function acquire_lock(console, result_cb)
     elseif choice == lock_choices.DELETE then
       console:plugin_print("Deleting existing build lock!\n", "Warn")
 
-      assert(uv.fs_unlink(lock_path, vim.schedule_wrap(co)))
+      assert(uv.fs_unlink(lock_path, vim.schedule_wrap(resume_co)))
       local unlink_err_msg, unlink_ok = coroutine.yield()
       if not unlink_ok and not unlink_err_msg:find "^ENOENT:" then
         error(
@@ -372,7 +385,7 @@ local function acquire_lock(console, result_cb)
     return choice
   end
 
-  co = co_wrap(function()
+  co = coroutine.create(function()
     console:plugin_print(
       ('Acquiring build lock at "%s"...\n'):format(lock_path),
       "Debug"
@@ -386,7 +399,7 @@ local function acquire_lock(console, result_cb)
         error("Console buffer was closed", 0)
       end
 
-      assert(uv.fs_open(lock_path, "wx", 420, co))
+      assert(uv.fs_open(lock_path, "wx", 420, resume_co))
       local open_err_msg
       open_err_msg, acquired_lock_fd = coroutine.yield()
       if acquired_lock_fd then
@@ -400,7 +413,8 @@ local function acquire_lock(console, result_cb)
         -- do next, as we can't easily take over an existing lock without race
         -- conditions. (At least not with what luv provides)
         -- TODO: use "flock" executable if available?
-        local check_ok, check_rv = pcall(check_lock_valid)
+        local check_ok, check_rv =
+          yield_until_dead(coroutine.create(check_lock_valid))
         if not check_ok then
           console:plugin_print(
             ("Failed to validate existing build lock: %s\n"):format(check_rv),
@@ -444,7 +458,7 @@ local function acquire_lock(console, result_cb)
       else
         -- Retry after a bit. Not setting the repeat time on the timer to
         -- schedule the next retry only after we get to this point.
-        assert(retry_timer:start(1500, 0, vim.schedule_wrap(co)))
+        assert(retry_timer:start(1500, 0, vim.schedule_wrap(resume_co)))
         coroutine.yield()
       end
     end
@@ -453,7 +467,7 @@ local function acquire_lock(console, result_cb)
     -- libuv pipes to fds are broken and can cause aborts; avoid them.
     -- Don't bother handling partial writes; we're not writing much anyway.
     local data = tostring(uv.os_getpid())
-    assert(uv.fs_write(acquired_lock_fd, data, nil, co))
+    assert(uv.fs_write(acquired_lock_fd, data, nil, resume_co))
     local write_err, written = coroutine.yield()
     if written ~= #data then
       write_err = ("Partial write (%d/%d bytes)"):format(written, #data)
@@ -462,7 +476,7 @@ local function acquire_lock(console, result_cb)
       error(("Failed to write to build lock: %s"):format(write_err), 0)
     end
 
-    assert(uv.fs_fsync(acquired_lock_fd, co))
+    assert(uv.fs_fsync(acquired_lock_fd, resume_co))
     local sync_err, sync_ok = coroutine.yield()
     if not sync_ok then
       -- Lame, but maybe OK as long as all processes are local.
@@ -475,7 +489,7 @@ local function acquire_lock(console, result_cb)
     return release_lock
   end)
 
-  co()
+  resume_co()
 end
 
 --- @class (exact) CCompiler
@@ -614,9 +628,23 @@ function M.rebuild(opts)
   end
 
   local co
-  co = coroutine.wrap(finish_on_err_wrap(function()
+  local function resume_co(...)
+    local ok, rv = coroutine.resume(co, ...)
+    if coroutine.status(co) ~= "dead" then
+      return
+    end
+
+    if not ok then
+      finish(false, rv)
+    end
+    -- Nothing needs to be done if the coroutine finishes without error; the
+    -- rest of the work happens in callbacks.
+    return rv
+  end
+
+  co = coroutine.create(function()
     if not opts.ignore_lock then
-      acquire_lock(console, vim.schedule_wrap(co))
+      acquire_lock(console, vim.schedule_wrap(resume_co))
       local lock_ok, lock_rv = coroutine.yield()
       if not lock_ok then
         error(lock_rv, 0)
@@ -667,9 +695,9 @@ function M.rebuild(opts)
 
     local out_dir_template =
       fs.joinpath(fs.dirname(fn.tempname()), "actually-doom.nvim.XXXXXX")
-    assert(uv.fs_mkdtemp(out_dir_template, co))
+    assert(uv.fs_mkdtemp(out_dir_template, resume_co))
     local out_dir_err_msg
-    out_dir_err_msg, out_dir = coroutine.yield(co)
+    out_dir_err_msg, out_dir = coroutine.yield()
 
     if not out_dir then
       error(
@@ -807,9 +835,9 @@ function M.rebuild(opts)
     for _ = 1, parallelism do
       finish_on_err(spawn_next_compile_job)
     end
-  end))
+  end)
 
-  co()
+  resume_co()
 end
 
 return M

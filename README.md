@@ -12,7 +12,8 @@ v0.11+ on Linux!
 
 ## Prerequisites
 
-- [Neovim](https://neovim.io/) v0.11+.
+- [Neovim](https://neovim.io/) v0.11+. (LuaJIT support is recommended for
+  performance reasons, but not required; check `:version`)
 - Linux.
 - C compiler with support for the [C99 standard](https://en.wikipedia.org/wiki/C99).
 
@@ -29,8 +30,9 @@ For more information regarding controls and such, consult
 
 ### Kitty graphics protocol
 
-Though optional, the game is best experienced in a terminal that implements the
-kitty graphics protocol with Unicode placeholder support.
+Though optional, for increased performance and visual clarity, the game is
+best experienced in a terminal that implements the kitty graphics protocol
+with support for Unicode placeholders.
 
 See `:h actually-doom-kitty` for details. (And `:h actually-doom-tmux` if using
 tmux)
