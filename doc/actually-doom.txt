@@ -143,6 +143,8 @@ play({opts})					*actually-doom.play()*
 	• {opts}  `(table?)` Optional parameters:
 		• {iwad_path} (`string?`, default: nil)
 		  Path of the IWAD file to use.  If nil, select from a menu.
+		  DOOM's current directory is set to its install directory, so
+		  non-absolute paths are relative to that.
 		• {kitty_graphics} (`boolean?`, default: nil)
 		  If true, enable kitty graphics protocol support.
 		  |actually-doom-kitty|

@@ -1,8 +1,9 @@
 # High priority
 
 # Medium Priority
-- [ ] Clean up the code; address some of the TODOs hanging around before
-  release. :)
+- [ ] Per-WAD save directory; usually trying to load a save of a different WAD
+  will lead to errors.
+- [ ] Clean up the code; address some of the TODOs hanging around.
 - [ ] Implement music, maybe in the executable.
 - [ ] When Nvim gets kitty key press/release detection support, use that (or
   possibly make the executable listen for it, but that might be hard under

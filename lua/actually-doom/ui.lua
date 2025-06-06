@@ -301,9 +301,6 @@ function Console:close()
   if self.close_autocmd then
     api.nvim_del_autocmd(self.close_autocmd)
   end
-  if api.nvim_buf_is_valid(self.buf) then
-    api.nvim_buf_delete(self.buf, { force = true })
-  end
 end
 
 --- @param doom Doom
@@ -410,10 +407,11 @@ function Console:print(text, console_hl)
   )
 
   -- Tail console windows on the last line to the output.
+  -- nvim_buf_set_text does not automatically scroll windows, even if it changes
+  -- the cursor position to be outside of it.
   for _, win in ipairs(fn.win_findbuf(self.buf)) do
     local row, col = unpack(api.nvim_win_get_cursor(win))
-    if row == last_line_row + 1 then
-      -- TODO: why isn't this scrolling when non-current? It should be!
+    if row == new_last_line_row + 1 then
       api.nvim_win_set_cursor(win, { new_last_line_row + 1, col })
     end
   end

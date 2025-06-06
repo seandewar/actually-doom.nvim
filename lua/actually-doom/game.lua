@@ -367,6 +367,9 @@ function Doom:enable_kitty(on)
   -- TODO: these checks are icky; simplify or remove them; also split the UI
   -- handles portion of Screen into an optional object that's nil when the UI
   -- creation is still scheduling
+  if self.closed then
+    return
+  end
   if not self.screen or not self.screen.buf then
     vim.schedule(function()
       self:enable_kitty(on)
@@ -1050,7 +1053,7 @@ function M.play(opts)
       default = fn.fnamemodify("", ":~"),
       completion = "file",
     }, function(path)
-      opts.iwad_path = path
+      opts.iwad_path = fs.abspath(path)
       play_iwad()
     end)
   end
@@ -1073,7 +1076,7 @@ function M.play(opts)
     if choice == true then
       input_path()
     else
-      opts.iwad_path = choice
+      opts.iwad_path = choice and fs.abspath(choice) or nil
       play_iwad()
     end
   end)
