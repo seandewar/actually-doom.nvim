@@ -350,12 +350,13 @@ do
       end
     end
 
-    -- TODO: this doesn't work well for the plasma gun or chain gun...
+    -- TODO: doesn't always work well for the plasma gun or chain gun, but the
+    -- default of 375 isn't awful.
     self:press_key {
       key = dkey,
       shift = shift,
       alt = alt,
-      release_time = uv.now() + 375,
+      release_time = uv.now() + (self.play_opts.key_hold_ms or 375),
     }
     self:schedule_check()
     return "" -- We handled the key, so eat it (yum!)
@@ -439,13 +440,16 @@ local function init_process(doom, exe_path, sock_path)
     end
   end
 
-  local sys_ok, sys_rv = pcall(vim.system, {
+  local cmd = {
     exe_path,
     "-listen",
     sock_path,
     "-iwad",
     doom.play_opts.iwad_path,
-  }, {
+  }
+  vim.list_extend(cmd, doom.play_opts.extra_args or {})
+
+  local sys_ok, sys_rv = pcall(vim.system, cmd, {
     cwd = fs.dirname(exe_path),
     stdout = new_out_cb(),
     stderr = new_out_cb "Warn",
@@ -1000,6 +1004,8 @@ end
 --- @field iwad_path string?
 --- @field kitty_graphics boolean?
 --- @field tmux_passthrough boolean?
+--- @field extra_args string[]?
+--- @field key_hold_ms integer?
 
 --- @param opts PlayOpts?
 function M.play(opts)
@@ -1053,7 +1059,7 @@ function M.play(opts)
       default = fn.fnamemodify("", ":~"),
       completion = "file",
     }, function(path)
-      opts.iwad_path = fs.abspath(path)
+      opts.iwad_path = fs.normalize(fs.abspath(path))
       play_iwad()
     end)
   end
@@ -1076,7 +1082,7 @@ function M.play(opts)
     if choice == true then
       input_path()
     else
-      opts.iwad_path = choice and fs.abspath(choice) or nil
+      opts.iwad_path = choice and fs.normalize(fs.abspath(choice)) or nil
       play_iwad()
     end
   end)

@@ -135,6 +135,7 @@ setup({config})					*actually-doom.setup()*
 		  Default `opts` for |actually-doom.play()|.
 		• {build} (`table?`, default: nil)
 		  Default `opts` for |actually-doom.rebuild()|.
+		To set the value of a field to nil, use |vim.NIL|.
 
 play({opts})					*actually-doom.play()*
 	Launch a new instance of DOOM.
@@ -152,6 +153,11 @@ play({opts})					*actually-doom.play()*
 		  If true, enable tmux passthrough sequence support.
 		  If nil, it is enabled only if `$TMUX` is set.
 		  |actually-doom-tmux|
+		• {extra_args} (`string[]?`, default: nil)
+		  Extra arguments to pass to the DOOM process.
+		• {key_hold_ms} (`integer?`, default: nil)
+		  Milliseconds to automatically hold down a key for.
+		  If nil, 375.
 
 rebuild({opts})					*actually-doom.rebuild()*
 	Asynchronously rebuild the DOOM executable. (without playing)
@@ -167,8 +173,8 @@ rebuild({opts})					*actually-doom.rebuild()*
 		  C compiler to use.  If string, it is the name of the
 		  compiler executable.  If nil, falls back to `$CC` if
 		  defined, otherwise `cc`.  It is assumed the compiler
-		  understands GCC/Clang-style command line arguments; if not,
-		  then it can be set to a table with the following fields:
+		  understands GCC/Clang-style arguments; if not, then it can
+		  be set to a table with the following fields:
 			• {compile_cmd} (`fun(src_path: string, object_name: string): string[]`)
 			  Function called with the path of the source file to
 			  compile and the name of the object file to produce.
