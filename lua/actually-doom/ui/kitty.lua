@@ -410,7 +410,7 @@ end
 function M:close()
   if self.has_image then
     -- Delete the image and its virtual placement.
-    io.stdout:write(
+    io.stderr:write(
       self.screen:passthrough_escape(("\27_Gq=2,a=d,d=I,i=%u,p=%u\27\\"):format(
         self.image_id,
         self.image_id -- Placement ID same as image ID for convenience.
@@ -433,7 +433,7 @@ function M:refresh()
 
   -- Read frame image data (24-bit RGB) from the shared memory object.
   -- Create/re-use and place the virtual placement for it.
-  io.stdout:write(
+  io.stderr:write(
     self.screen:passthrough_escape(
       (
         "\27_Gq=2,a=T,U=1,z=-1,p=%u,c=%u,r=%u," -- Control and placement info.
