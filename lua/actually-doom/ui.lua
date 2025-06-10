@@ -570,8 +570,6 @@ function Screen:goto_win()
 
   -- Create a new window.
   local win_config = new_screen_win_config()
-  self.term_width = win_config.width
-  self.term_height = win_config.height
   self.win = api.nvim_open_win(self.buf, true, win_config)
 
   api.nvim_set_option_value("winfixbuf", true, { win = self.win })
