@@ -363,7 +363,7 @@ do
   end
 end
 
---- @param on boolean?
+--- @param on boolean? If nil, detect kitty support and enable conditionally.
 function Doom:enable_kitty(on)
   -- TODO: these checks are icky; simplify or remove them; also split the UI
   -- handles portion of Screen into an optional object that's nil when the UI
@@ -385,14 +385,40 @@ function Doom:enable_kitty(on)
     put_string(self.send_buf, name or "")
   end
 
-  if on and not self.screen:kitty_gfx() then
-    self.console:plugin_print "kitty graphics protocol ON\n"
+  local detect_cb = (on == nil and fn.has "termux" == 0)
+      and function(kitty_gfx, result)
+        if result ~= "OK" then
+          self.console:plugin_print(
+            (
+              "kitty detection failed: %s\n"
+              .. 'See ":help actually-doom-kitty" for advice\n'
+            ):format(result),
+            "Warn"
+          )
+          self:enable_kitty(false)
+          return
+        end
+
+        if kitty_gfx == self.screen:kitty_gfx() then
+          self.console:plugin_print "kitty graphics detected! Turning ON\n"
+          kitty_gfx.detect = nil
+        end
+      end
+    or nil
+
+  if (on or detect_cb) and not self.screen:kitty_gfx() then
+    if detect_cb then
+      self.console:plugin_print "Detecting kitty graphics support...\n"
+    else
+      self.console:plugin_print "kitty graphics protocol ON\n"
+    end
 
     local shm_name = ("/actually-doom:%d"):format(self.process.pid)
     send_frame_shm_name(shm_name)
     self:send_set_config_var("detached_ui", "0")
     self:schedule_check()
     self.screen:set_gfx(require "actually-doom.ui.kitty", shm_name)
+    self.screen:kitty_gfx().detect = detect_cb
   elseif not on and not self.screen:cell_gfx() then
     self.console:plugin_print "kitty graphics protocol OFF\n"
 
@@ -532,9 +558,7 @@ local function recv_msg_loop(doom, buf)
   -- Can't use the typical Vanilla DOOM CTRL key to fire (as it's only available
   -- as a modifier for other keys), so use X.
   doom:send_set_config_var("key_fire", "45") -- DOS scancode for x.
-  if doom.screen.visible then
-    doom:send_frame_request()
-  end
+  doom:send_frame_request()
   doom:schedule_check()
 
   -- TODO: merge AMSG_FRAME_DRAW_MENU with AMSG_FRAME so we don't need this.
