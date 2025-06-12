@@ -10,6 +10,7 @@ local fn = vim.fn
 --- @field image_id_msb integer
 --- @field image_id_lsb integer
 --- @field has_image boolean?
+--- @field detect fun(KittyGfx, result: string)|boolean?
 ---
 --- @field new function
 --- @field type string
@@ -402,8 +403,6 @@ function M.new(screen, shm_name)
   -- the number is sign extended, so %u will result in too large of a value.
   -- Mask the low 32-bits via modulo to eliminate any sign-extended bits.
   kitty.image_id = kitty.image_id % 0x100000000
-
-  setup_term_buf(kitty)
   return kitty
 end
 
@@ -420,12 +419,81 @@ function M:close()
   end
 end
 
+--- @param kitty KittyGfx
+local function handle_detection(kitty)
+  if type(kitty.detect) ~= "function" then
+    return -- Already started, finished, or detection unwanted.
+  end
+  local detect_cb = kitty.detect --[[@as fun(KittyGfx, result: string)]]
+  kitty.detect = true
+  if fn.has "nvim-0.12" == 0 then
+    detect_cb(kitty, "Nvim v0.12+ is required to detect support")
+    return
+  end
+
+  local timer --- @type uv.uv_timer_t
+  local autocmd --- @type integer?
+  autocmd = api.nvim_create_autocmd("TermResponse", {
+    callback = function(args)
+      local status =
+        args.data.sequence:match(("^\27_Gi=%d;(.+)$"):format(kitty.image_id))
+      if not status then
+        if not args.data.sequence:find "^\27[?64;" then
+          return
+        end
+        status = "Unsupported by terminal"
+      end
+
+      --- @cast status string
+      timer:stop()
+      timer:close()
+      vim.schedule_wrap(detect_cb)(kitty, status)
+      autocmd = nil
+      return true -- autocmd begone!
+    end,
+  })
+
+  -- Query is similar to what we'll typically send to the terminal.
+  -- Particuarly, we ensure it can read from the shared memory object.
+  io.stderr:write(
+    kitty.screen:passthrough_escape(
+      (
+        "\27_Ga=q,t=s,f=24,i=%u,s=%u,v=%u;%s\27\\" -- Image info.
+        .. "\27[c" -- DA1.
+      ):format(
+        kitty.image_id,
+        kitty.screen.res_x,
+        kitty.screen.res_y,
+        kitty.shm_name_base64
+      )
+    )
+  )
+
+  timer = vim.defer_fn(function() -- Already implicitly vim.scheduled.
+    if autocmd then
+      api.nvim_del_autocmd(autocmd)
+      autocmd = nil
+      detect_cb(
+        kitty,
+        "Timed out -- your terminal maybe lacks support, "
+          .. "or tmux passthrough is not enabled"
+      )
+    end
+  end, 350)
+end
+
 function M:refresh()
+  if self.detect then
+    handle_detection(self)
+    return
+  end
+
   local old_term_width = self.screen.term_width
   local old_term_height = self.screen.term_height
   self.screen:update_term_size()
   if
-    self.screen.term_width ~= old_term_width
+    not self.has_image
+    or self.screen.term_width ~= old_term_width
     or self.screen.term_height ~= old_term_height
   then
     setup_term_buf(self)

@@ -34,6 +34,10 @@ Though optional, for increased performance and visual clarity, the game is
 best experienced in a terminal that implements the kitty graphics protocol
 with support for Unicode placeholders.
 
+[In Nvim v0.12+](https://github.com/neovim/neovim/pull/34426),
+actually-doom.nvim attempts to auto-detect support by default. In older versions
+of Nvim, it will have to be enabled manually.
+
 See `:h actually-doom-kitty` for details. (And `:h actually-doom-tmux` if using
 tmux)
 

@@ -30,10 +30,17 @@ COMMANDS					*actually-doom-commands*
 ==============================================================================
 GAME CONTROLS				*actually-doom-game-controls*
 
-Controls are similar to vanilla DOOM's.  The most important are:
+Many controls are similar to vanilla DOOM's.  The most important are:
+
+		*actually-doom_CTRL-\_CTRL-N* *actually-doom_<C-\><C-N>*
+<C-\><C-N>		Exit |Terminal-mode|.  This allows you to stop sending
+			input to DOOM without quitting.  |t_CTRL-\_CTRL-N|
 
 						*actually-doom_<Esc>*
-<Esc>			Toggle the menu.
+<Esc>			Toggle the menu or navigate to the previous menu.
+
+			NOTE: If you have remapped <Esc> to instead exit
+			|Terminal-mode|, this may cause issues.
 
 						*actually-doom_<CR>*
 <CR>			Select menu option.
@@ -76,7 +83,7 @@ CTRL-K			Toggle kitty graphics protocol support.  This works
 			only in supported terminals.  |actually-doom-kitty|
 
 						*actually-doom_<C-T>*
-CTRL-T			Toggle tmux passthrough support. |actually-doom-tmux|
+CTRL-T			Toggle tmux passthrough support.  |actually-doom-tmux|
 
 ==============================================================================
 KITTY GRAPHICS PROTOCOL				*actually-doom-kitty*
@@ -86,10 +93,16 @@ best experienced in a terminal that implements the kitty graphics protocol
 with support for Unicode placeholders.
 (https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
-In a supported terminal, it can be toggled in-game by pressing CTRL-K.
+Nvim v0.12+ supports handling APC responses from |TermResponse|, which allows
+actually-doom.nvim to detect kitty graphics support automatically, enabling it
+by default if available.  In older versions of Nvim, it will need to be
+turned on manually.
+
+In a supported terminal, it can be toggled in-game by pressing CTRL-K.  See
+|actually-doom-persist-kitty-tmux| for how to persist this setting.
 
 Because shared memory is used to transmit frame data for performance reasons,
-this does NOT work remotely! (E.g: SSH)
+this does NOT work remotely! (E.g: via SSH)
 
 
 TMUX PASSTHROUGH				*actually-doom-tmux*
@@ -103,10 +116,11 @@ to be effective.
 
 actually-doom.nvim automatically uses passthrough sequences if the `$TMUX`
 environment variable is set, but it can be toggled manually by pressing CTRL-T
-in-game.
+in-game.  See |actually-doom-persist-kitty-tmux| for how to persist this
+setting.
 
-------------------------------------------------------------------------------
 
+					*actually-doom-persist-kitty-tmux*
 Your preferences for these settings can be saved by calling
 |actually-doom.setup()| within your |config|.  For example, to always enable
 both kitty graphics and tmux passthrough support, add the following Lua code:
@@ -148,6 +162,7 @@ play({opts})					*actually-doom.play()*
 		  non-absolute paths are relative to that.
 		• {kitty_graphics} (`boolean?`, default: nil)
 		  If true, enable kitty graphics protocol support.
+		  If nil and using Nvim v0.12+, auto-detect support.
 		  |actually-doom-kitty|
 		• {tmux_passthrough} (`boolean?`, default: nil)
 		  If true, enable tmux passthrough sequence support.
