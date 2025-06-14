@@ -385,7 +385,13 @@ function Doom:enable_kitty(on)
     put_string(self.send_buf, name or "")
   end
 
-  local detect_cb = (on == nil and fn.has "termux" == 0)
+  local should_detect = on == nil
+    and fn.has "termux" == 0
+    -- Only if we actually have a TUI lol.
+    and vim.iter(api.nvim_list_uis()):find(function(u)
+      return u.chan == 1 and u.stdout_tty
+    end)
+  local detect_cb = should_detect
       and function(kitty_gfx, result)
         if result ~= "OK" then
           self.console:plugin_print(

@@ -159,8 +159,8 @@ play({opts})					*actually-doom.play()*
 		  non-absolute paths are relative to that.
 		• {kitty_graphics} (`boolean?`, default: nil)
 		  If true, enable kitty graphics protocol support.
-		  If nil and using Nvim v0.12+, auto-detect support.
-		  |actually-doom-kitty|
+		  If nil and using Nvim v0.12+ in the |TUI|, auto-detect
+		  support.  |actually-doom-kitty|
 		• {tmux_passthrough} (`boolean?`, default: nil)
 		  If true, enable tmux passthrough sequence support.
 		  If nil, it is enabled only if `$TMUX` is set.
