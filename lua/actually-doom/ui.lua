@@ -510,6 +510,17 @@ function Screen.new(doom, res_x, res_y)
     -- Disable the scrollback buffer as much as we can.
     api.nvim_set_option_value("scrollback", 1, { buf = screen.buf })
 
+    -- Some users remap <Esc> to leave terminal mode, which doesn't work well
+    -- for DOOM, as it's used to go back in the menus. Just define a
+    -- buffer-local mapping that forwards it exactly.
+    api.nvim_buf_set_keymap(
+      screen.buf,
+      "t",
+      "<Esc>",
+      "<Esc>",
+      { noremap = true, nowait = true }
+    )
+
     screen:goto_win()
   end)
 

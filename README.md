@@ -34,7 +34,7 @@ Though optional, for increased performance and visual clarity, the game is
 best experienced in a terminal that implements the kitty graphics protocol
 with support for Unicode placeholders.
 
-[In Nvim v0.12+](https://github.com/neovim/neovim/pull/34426),
+In [Nvim v0.12+](https://github.com/neovim/neovim/pull/34426),
 actually-doom.nvim attempts to auto-detect support by default. In older versions
 of Nvim, it will have to be enabled manually.
 
@@ -52,6 +52,10 @@ Fortunately, the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keybo
 provides the ability to [detect these events](https://sw.kovidgoyal.net/kitty/keyboard-protocol/#event-types),
 but [Neovim currently lacks support](https://github.com/neovim/neovim/issues/27509)
 for this.
+
+### How do I stop sending input to DOOM without exiting?
+
+Press `<C-\><C-N>`.
 
 ### Why no Windows/Mac/whatever support?
 

@@ -39,9 +39,6 @@ Many controls are similar to vanilla DOOM's.  The most important are:
 						*actually-doom_<Esc>*
 <Esc>			Toggle the menu or navigate to the previous menu.
 
-			NOTE: If you have remapped <Esc> to instead exit
-			|Terminal-mode|, this may cause issues.
-
 						*actually-doom_<CR>*
 <CR>			Select menu option.
 
