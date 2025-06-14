@@ -91,9 +91,9 @@ with support for Unicode placeholders.
 (https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
 Nvim v0.12+ supports handling APC responses from |TermResponse|, which allows
-actually-doom.nvim to detect kitty graphics support automatically, enabling it
-by default if available.  In older versions of Nvim, it will need to be
-turned on manually.
+actually-doom.nvim to detect kitty graphics support automatically when running
+within the |TUI|, enabling it by default if available.  In other cases, it
+will need to be turned on manually.
 
 In a supported terminal, it can be toggled in-game by pressing CTRL-K.  See
 |actually-doom-persist-kitty-tmux| for how to persist this setting.
