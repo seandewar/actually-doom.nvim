@@ -57,6 +57,12 @@ for this.
 
 Press `<C-\><C-N>`.
 
+### Why does the graphics and performance suck?
+
+You're likely using the fallback renderer that blasts-out a bunch of escape
+codes to draw to the terminal grid. See `:h actually-doom-kitty` for a much
+better experience.
+
 ### Why no Windows/Mac/whatever support?
 
 There's no technical reason, it's just that I daily-drive [Fedora Linux](https://fedoraproject.org/)
