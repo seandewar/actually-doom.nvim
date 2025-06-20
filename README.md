@@ -28,6 +28,20 @@ of DOOM is included for your convenience.
 For more information regarding controls and such, consult
 `:help actually-doom.txt`.
 
+### Keybindings
+
+- **Movement**: Arrow keys (hold Shift to run)
+- **Turn**: Left/Right arrows (hold Shift to turn quickly)
+- **Strafe**: Alt + Left/Right arrows (may not work in all terminals)
+- **Fire**: X
+- **Use/Open doors**: Space
+- **Weapon selection**: Number keys 0-8
+- **Toggle automap**: Tab
+- **Menu**: Escape
+- **Select menu option**: Enter
+- **Toggle renderer**: Ctrl+K (switch between kitty graphics and cell-based rendering)
+- **Stop capturing input (i.e. to go back to Neovim control)**: Ctrl+\\ Ctrl+N
+
 ### Kitty graphics protocol
 
 Though optional, for increased performance and visual clarity, the game is
@@ -71,6 +85,18 @@ in terminal handling and process management.
 If you're able to get things working on Windows (and if your code isn't
 too messy 😉), feel free to [open a pull request](https://github.com/seandewar/actually-doom.nvim/pulls)
 with your changes.
+
+### macOS shared memory errors?
+
+If you encounter "Failed to set size of frame data shared memory" errors on macOS,
+you may need to increase the shared memory limit:
+
+```bash
+sudo sysctl -w kern.sysv.shmmax=8192000
+```
+
+This increases the maximum shared memory segment size to 8MB. The kitty graphics
+renderer requires shared memory for efficient frame data transfer.
 
 ### Why did you make this?
 
