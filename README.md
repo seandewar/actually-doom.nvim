@@ -86,18 +86,6 @@ If you're able to get things working on Windows (and if your code isn't
 too messy 😉), feel free to [open a pull request](https://github.com/seandewar/actually-doom.nvim/pulls)
 with your changes.
 
-### macOS shared memory errors?
-
-If you encounter "Failed to set size of frame data shared memory" errors on macOS,
-you may need to increase the shared memory limit:
-
-```bash
-sudo sysctl -w kern.sysv.shmmax=8192000
-```
-
-This increases the maximum shared memory segment size to 8MB. The kitty graphics
-renderer requires shared memory for efficient frame data transfer.
-
 ### Why did you make this?
 
 🗿
