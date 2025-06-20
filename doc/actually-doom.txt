@@ -87,8 +87,8 @@ KITTY GRAPHICS PROTOCOL				*actually-doom-kitty*
 
 Though optional, for increased performance and visual clarity, the game is
 best experienced in a terminal that implements the kitty graphics protocol
-with support for Unicode placeholders.
-(https://sw.kovidgoyal.net/kitty/graphics-protocol)
+with support for Unicode placeholders and image transmission via shared
+memory. (https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
 Nvim v0.12+ supports handling APC responses from |TermResponse|, which allows
 actually-doom.nvim to detect kitty graphics support automatically when running
