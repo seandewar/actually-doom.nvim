@@ -1,7 +1,7 @@
 # actually-doom.nvim
 
 This ain't some random DOOM Emacs-themed distro; _actually_ play DOOM in Neovim
-v0.11+ on Linux!
+v0.11+ on Linux and macOS!
 
 <p align="center">
     <img alt="Kitty graphics on" width="54%" src="https://github.com/user-attachments/assets/a20eb1c6-0522-4db7-98a2-3bc86ca6ac67"/>
@@ -14,7 +14,7 @@ v0.11+ on Linux!
 
 - [Neovim](https://neovim.io/) v0.11+. (LuaJIT support is recommended for
   performance reasons, but not required; check `:version`)
-- Linux.
+- Linux or macOS.
 - C compiler with support for the [C99 standard](https://en.wikipedia.org/wiki/C99).
 
 ## How to play
@@ -63,12 +63,12 @@ You're likely using the fallback renderer that blasts-out a bunch of escape
 codes to draw to the terminal grid. See `:h actually-doom-kitty` for a much
 better experience.
 
-### Why no Windows/Mac/whatever support?
+### Why no Windows support?
 
-There's no technical reason, it's just that I daily-drive [Fedora Linux](https://fedoraproject.org/)
-these days.
+Windows support would require more significant changes to handle platform differences
+in terminal handling and process management.
 
-If you're able to get things working on your platform (and if your code isn't
+If you're able to get things working on Windows (and if your code isn't
 too messy 😉), feel free to [open a pull request](https://github.com/seandewar/actually-doom.nvim/pulls)
 with your changes.
 

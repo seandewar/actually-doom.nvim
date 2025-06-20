@@ -419,7 +419,8 @@ function Doom:enable_kitty(on)
       self.console:plugin_print "kitty graphics protocol ON\n"
     end
 
-    local shm_name = ("/actually-doom:%d"):format(self.process.pid)
+    -- NOTE: macOS doesn't like colons in shm names
+    local shm_name = ("/actually-doom-%d"):format(self.process.pid)
     send_frame_shm_name(shm_name)
     self:send_set_config_var("detached_ui", "0")
     self:schedule_check()
