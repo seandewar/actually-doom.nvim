@@ -833,7 +833,9 @@ void DG_Init(void)
 #elif defined(__APPLE__)
     pid_t peer_pid = 0;
     socklen_t peer_pid_len = sizeof(peer_pid);
-    if (getsockopt(comm_sock_fd, SOL_LOCAL, LOCAL_PEERPID, &peer_pid, &peer_pid_len) == 0) {
+    if (getsockopt(comm_sock_fd, SOL_LOCAL, LOCAL_PEERPID, &peer_pid,
+                   &peer_pid_len)
+        == 0) {
         printf(LOG_PRE "PID %jd has connected\n", (intmax_t)peer_pid);
     } else {
         printf(LOG_PRE "A client has connected\n");
@@ -935,10 +937,11 @@ void DG_DrawFrame(void)
     // Old file descriptor should already be closed, but make sure anyway.
     CloseFrameShm();
 
-    // Always unlink before creating to ensure a fresh shared memory object
-    // This is especially important on macOS where ftruncate can only be called once
+    // Always unlink before creating to ensure a fresh shared memory object.
+    // Especially important on macOS where ftruncate can only be called once.
     if (shm_unlink(frame_shm_name) == -1 && errno != ENOENT) {
-        fprintf(stderr, LOG_PRE "Warning: Failed to unlink old shared memory: %s\n",
+        fprintf(stderr,
+                LOG_PRE "Warning: Failed to unlink old shared memory: %s\n",
                 strerror(errno));
     }
 

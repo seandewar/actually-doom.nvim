@@ -12,7 +12,7 @@ To use this plugin, the following is required:
 
 - Neovim v0.11+. (LuaJIT support is recommended for performance reasons, but
   not required; check `:version`)
-- Linux.
+- Linux or macOS. (macOS support courtesy of @sockthedev on GitHub)
 - C compiler with support for the C99 standard.
 
 ==============================================================================

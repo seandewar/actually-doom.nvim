@@ -14,7 +14,7 @@ v0.11+ on Linux and macOS!
 
 - [Neovim](https://neovim.io/) v0.11+. (LuaJIT support is recommended for
   performance reasons, but not required; check `:version`)
-- Linux or macOS.
+- Linux or macOS. (macOS support courtesy of [@sockthedev](https://github.com/sockthedev))
 - C compiler with support for the [C99 standard](https://en.wikipedia.org/wiki/C99).
 
 ## How to play
@@ -28,7 +28,7 @@ of DOOM is included for your convenience.
 For more information regarding controls and such, consult
 `:help actually-doom.txt`.
 
-### Keybindings
+### Controls
 
 - **Movement**: Arrow keys (hold Shift to run)
 - **Turn**: Left/Right arrows (hold Shift to turn quickly)
@@ -40,7 +40,7 @@ For more information regarding controls and such, consult
 - **Menu**: Escape
 - **Select menu option**: Enter
 - **Toggle renderer**: Ctrl+K (switch between kitty graphics and cell-based rendering)
-- **Stop capturing input (i.e. to go back to Neovim control)**: Ctrl+\\ Ctrl+N
+- **Stop capturing input (i.e. return control to Nvim)**: Ctrl+\\ Ctrl+N
 
 ### Kitty graphics protocol
 
@@ -79,8 +79,10 @@ better experience.
 
 ### Why no Windows support?
 
-Windows support would require more significant changes to handle platform differences
-in terminal handling and process management.
+Windows support would require more significant changes to handle platform
+differences in terminal handling and process management. Plus, I only have
+access to [Fedora Linux](https://fedoraproject.org/); macOS support was instead
+kindly added by [@sockthedev](https://github.com/sockthedev).
 
 If you're able to get things working on Windows (and if your code isn't
 too messy 😉), feel free to [open a pull request](https://github.com/seandewar/actually-doom.nvim/pulls)
