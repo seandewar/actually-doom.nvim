@@ -935,6 +935,13 @@ void DG_DrawFrame(void)
     // Old file descriptor should already be closed, but make sure anyway.
     CloseFrameShm();
 
+    // Always unlink before creating to ensure a fresh shared memory object
+    // This is especially important on macOS where ftruncate can only be called once
+    if (shm_unlink(frame_shm_name) == -1 && errno != ENOENT) {
+        fprintf(stderr, LOG_PRE "Warning: Failed to unlink old shared memory: %s\n",
+                strerror(errno));
+    }
+
     frame_shm_fd =
         shm_open(frame_shm_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if (frame_shm_fd == -1) {
@@ -948,15 +955,6 @@ void DG_DrawFrame(void)
                 I_Quit();
             continue;
         }
-#ifdef __APPLE__
-        // macOS has smaller default shared memory limits
-        if (errno == EINVAL) {
-            I_Error(LOG_PRE "Failed to set size of frame data shared memory: %s\n"
-                    "This may be due to macOS shared memory size limits.\n"
-                    "Try increasing the limit with: sudo sysctl -w kern.sysv.shmmax=4194304",
-                    strerror(errno));
-        }
-#endif
         I_Error(LOG_PRE "Failed to set size of frame data shared memory: %s",
                 strerror(errno));
     }
