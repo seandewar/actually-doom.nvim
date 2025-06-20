@@ -14,6 +14,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <sys/ucred.h>
+#endif
+
 #include "d_items.h"
 #include "d_player.h"
 #include "doomgeneric.h"
@@ -817,6 +821,7 @@ void DG_Init(void)
         }
     }
 
+#ifdef __linux__
     struct ucred creds;
     if (getsockopt(comm_sock_fd, SOL_SOCKET, SO_PEERCRED, &creds,
                    &(socklen_t){sizeof creds})
@@ -825,6 +830,17 @@ void DG_Init(void)
     } else {
         printf(LOG_PRE "A client has connected\n");
     }
+#elif defined(__APPLE__)
+    pid_t peer_pid = 0;
+    socklen_t peer_pid_len = sizeof(peer_pid);
+    if (getsockopt(comm_sock_fd, SOL_LOCAL, LOCAL_PEERPID, &peer_pid, &peer_pid_len) == 0) {
+        printf(LOG_PRE "PID %jd has connected\n", (intmax_t)peer_pid);
+    } else {
+        printf(LOG_PRE "A client has connected\n");
+    }
+#else
+    printf(LOG_PRE "A client has connected\n");
+#endif
 
     CloseListenSocket();
     clock_start_ms = GetClockMs();
@@ -932,6 +948,15 @@ void DG_DrawFrame(void)
                 I_Quit();
             continue;
         }
+#ifdef __APPLE__
+        // macOS has smaller default shared memory limits
+        if (errno == EINVAL) {
+            I_Error(LOG_PRE "Failed to set size of frame data shared memory: %s\n"
+                    "This may be due to macOS shared memory size limits.\n"
+                    "Try increasing the limit with: sudo sysctl -w kern.sysv.shmmax=4194304",
+                    strerror(errno));
+        }
+#endif
         I_Error(LOG_PRE "Failed to set size of frame data shared memory: %s",
                 strerror(errno));
     }

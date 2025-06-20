@@ -5,8 +5,16 @@
 # Just set $OUTDIR appropriately at the command line when invoking make.
 # You may need to run "make clean" first if an executable already exists there.
 
-CFLAGS += -std=c99 -Wall -Wextra -Wpedantic -g3 \
-          -D_POSIX_C_SOURCE=199309 -D_GNU_SOURCE
+CFLAGS += -std=c99 -Wall -Wextra -Wpedantic -g3
+
+# Platform-specific flags
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    CFLAGS += -D_POSIX_C_SOURCE=199309 -D_GNU_SOURCE
+else ifeq ($(UNAME_S),Darwin)
+    # macOS needs _DARWIN_C_SOURCE for some functions
+    CFLAGS += -D_DARWIN_C_SOURCE
+endif
 LDLIBS += -lm -lc
 OUTDIR ?= build
 

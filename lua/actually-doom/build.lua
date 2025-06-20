@@ -520,19 +520,33 @@ function M.rebuild(opts)
     if opts.cc == "zig" then
       cmd_with_cflags[#cmd_with_cflags + 1] = "cc"
     end
-    vim.list_extend(cmd_with_cflags, {
+    local cflags = {
       "-std=c99",
       "-Wall",
       "-Wextra",
       "-Wpedantic",
-      "-D_POSIX_C_SOURCE=199309",
-      "-D_GNU_SOURCE",
       "-DNDEBUG",
       "-O3",
-      "-flto=auto",
       -- Optimizations are on, but some debug info is useful, just in case.
       "-g",
-    })
+    }
+
+    -- Platform-specific flags
+    if fn.has "linux" == 1 then
+      vim.list_extend(cflags, {
+        "-D_POSIX_C_SOURCE=199309",
+        "-D_GNU_SOURCE",
+        "-flto=auto",
+      })
+    elseif fn.has "mac" == 1 then
+      -- macOS needs _DARWIN_C_SOURCE for some functions
+      vim.list_extend(cflags, {
+        "-D_DARWIN_C_SOURCE",
+        "-flto",
+      })
+    end
+
+    vim.list_extend(cmd_with_cflags, cflags)
 
     opts.cc = {
       compile_cmd = function(src_path, object_name)
