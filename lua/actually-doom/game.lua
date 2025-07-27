@@ -837,6 +837,9 @@ end
 --- @param doom Doom
 --- @param sock_path string
 local function init_connection(doom, sock_path)
+  local sock_dir_path = fs.dirname(sock_path)
+  local sock_name = fs.basename(sock_path)
+
   doom.sock = assert(uv.new_pipe())
   local tries_left = 20
   local schedule_connect -- Late assignment so connect_cb can call it.
@@ -892,19 +895,63 @@ local function init_connection(doom, sock_path)
 
   --- @param ms integer
   schedule_connect = function(ms)
-    -- Forward the libuv errors from trying to schedule the operations so that
-    -- they count as a failed connection attempt.
-    local _, err = doom.check_timer:start(ms, 0, function()
-      local _, err =
-        doom.sock:connect(sock_path, doom:close_on_err_wrap(connect_cb))
-      if err then
-        connect_cb(err) -- Forward the error.
-      end
-    end)
+    assert(doom.check_timer:start(ms, 0, function()
+      -- Connecting to a domain socket via an absolute path may not be possible,
+      -- as sockaddr_un.sun_path is typically shorter than the max path length.
+      -- Temporarily cwd to the socket directory and use a relative path
+      -- instead; avoid using Vim script's chdir, as it changes the previous
+      -- directory and fires autocommands.
+      --
+      -- In a perfect world, we could use connect2 and set PIPE_NO_TRUNCATE to
+      -- check if the path is too long, and then fallback to the workaround, but
+      -- it appears luv does not actually handle the return value of connect2
+      -- (probably because libuv incorrect documents uv_pipe_connect2 as
+      -- returning void rather than int...)
+      local old_cwd = assert(uv.cwd())
 
-    if err then
-      connect_cb(err) -- Forward the error.
-    end
+      local _, chdir_err = uv.chdir(sock_dir_path)
+      if chdir_err then
+        doom.console:plugin_print(
+          ('Failed to temporarily set working directory to "%s": %s\n'):format(
+            sock_dir_path,
+            chdir_err
+          ),
+          "Error"
+        )
+        doom:close()
+        return
+      end
+
+      local connect_err
+      _, connect_err =
+        doom.sock:connect(sock_name, doom:close_on_err_wrap(connect_cb))
+
+      _, chdir_err = uv.chdir(old_cwd)
+      if chdir_err then
+        -- uv.chdir doesn't notify Nvim of directory changes, which means
+        -- Nvim's idea of what directory we're in may be wrong, which can
+        -- cause strangeness. Attempt to re-sync it by at least setting it to
+        -- the home directory via Vim script's chdir.
+        vim.schedule(function()
+          fn.chdir "~"
+        end)
+
+        doom.console:plugin_print(
+          (
+            'Failed to restore working directory to "%s": %s; '
+            .. "attempting to restore to the home directory instead...\n"
+          ):format(old_cwd, chdir_err),
+          "Error"
+        )
+        doom:close()
+        return
+      end
+
+      if connect_err then
+        connect_cb(connect_err) -- Forward the error.
+        return
+      end
+    end))
   end
 
   schedule_connect(500)

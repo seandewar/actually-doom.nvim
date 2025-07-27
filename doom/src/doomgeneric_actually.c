@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdio.h>
@@ -26,6 +27,7 @@
 #include "i_video.h"
 #include "m_argv.h"
 #include "m_config.h"
+#include "m_misc.h"
 
 #define LOG_PRE "[actually-doom] "
 
@@ -765,28 +767,66 @@ void DG_Init(void)
         I_Error(LOG_PRE "\"-listen <socket_path>\" argument required");
 
     const char *sock_path = myargv[p + 1];
-    size_t sock_path_len = strlen(sock_path);
-    struct sockaddr_un listen_sock_addr = {.sun_family = AF_UNIX};
 
-    if (sock_path_len + 1 > sizeof listen_sock_addr.sun_path) {
-        I_Error(LOG_PRE "Listener socket path too long; max: %zu, size: %zu",
-                (sizeof listen_sock_addr.sun_path) - 1, sock_path_len);
-    }
+    // Max size of sun_path is typically less than the maximal path size; work
+    // around this by using chdir and a path relative to the socket's directory.
+    {
+        // +1 in case PATH_MAX doesn't include NUL. (true on some platforms)
+        char old_cwd_buf[PATH_MAX + 1];
+        const char *old_cwd = getcwd(old_cwd_buf, arrlen(old_cwd_buf));
+        if (!old_cwd) {
+            I_Error(LOG_PRE "Failed to get current working directory: %s",
+                    strerror(errno));
+        }
 
-    if ((listen_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        I_Error(LOG_PRE "Failed to create listener socket: %s",
-                strerror(errno));
-    }
+        // Don't bother using PATH_MAX here; it may not be defined or may not
+        // include NUL on some platforms, and does not account for an
+        // unsimplified sock_path. We'll just allocate instead.
+        // Don't care about freeing in the error path; let the OS do it.
+        char *sock_dirname_buf = M_StringDuplicate(sock_path);
+        char *sock_basename_buf = M_StringDuplicate(sock_path);
+        const char *sock_dirname = dirname(sock_dirname_buf);
+        const char *sock_basename = basename(sock_basename_buf);
 
-    I_AtExit(Cleanup, true);
-    // Bounds already checked above.
-    strcpy(listen_sock_addr.sun_path, sock_path);
+        struct sockaddr_un listen_sock_addr = {.sun_family = AF_UNIX};
+        size_t sock_basename_len = strlen(sock_basename);
 
-    if (bind(listen_sock_fd, (struct sockaddr *)&listen_sock_addr,
-             sizeof listen_sock_addr)
-        == -1) {
-        I_Error(LOG_PRE "Failed to bind listener socket to path \"%s\": %s",
-                sock_path, strerror(errno));
+        if (sock_basename_len + 1 > sizeof listen_sock_addr.sun_path) {
+            I_Error(LOG_PRE "Listener socket file name \"%s\" too long; "
+                            "max: %zu, size: %zu",
+                    sock_basename, (sizeof listen_sock_addr.sun_path) - 1,
+                    sock_basename_len);
+        }
+
+        if ((listen_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+            I_Error(LOG_PRE "Failed to create listener socket: %s",
+                    strerror(errno));
+        }
+
+        I_AtExit(Cleanup, true);
+        if (chdir(sock_dirname) == -1) {
+            I_Error(
+                LOG_PRE
+                "Failed to temporarily change working directory to \"%s\": %s",
+                sock_dirname, strerror(errno));
+        }
+
+        // Bounds checked earlier.
+        strcpy(listen_sock_addr.sun_path, sock_basename);
+        free(sock_basename_buf);
+        free(sock_dirname_buf);
+
+        if (bind(listen_sock_fd, (struct sockaddr *)&listen_sock_addr,
+                 sizeof listen_sock_addr)
+            == -1) {
+            I_Error(LOG_PRE "Failed to bind listener socket to path \"%s\": %s",
+                    sock_path, strerror(errno));
+        }
+
+        if (chdir(old_cwd) == -1) {
+            I_Error(LOG_PRE "Failed to restore working directory to \"%s\": %s",
+                    old_cwd, strerror(errno));
+        }
     }
 
     // Bound now, so this path has our socket file.
