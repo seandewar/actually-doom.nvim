@@ -16,11 +16,16 @@ v0.11+ on Linux and macOS!
   performance reasons, but not required; check `:version`)
 - Linux or macOS. (macOS support courtesy of [@sockthedev](https://github.com/sockthedev))
 - C compiler with support for the [C99 standard](https://en.wikipedia.org/wiki/C99).
+- For sound effects, an external audio player such as `ffplay`, `mpv`,
+  `pw-play`, `paplay`, `aplay`, or `afplay`.
 
 ## How to play
 
 Install it via your favourite package manager like any other plugin, then run
 `:Doom`.
+
+Sound effects are played by spawning an external audio player from Neovim.
+Music is still not implemented.
 
 The [shareware version](https://www.doomworld.com/classicdoom/info/shareware.php)
 of DOOM is included for your convenience.

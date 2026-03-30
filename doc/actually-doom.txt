@@ -14,6 +14,8 @@ To use this plugin, the following is required:
   not required; check `:version`)
 - Linux or macOS. (macOS support courtesy of @sockthedev on GitHub)
 - C compiler with support for the C99 standard.
+- For sound effects, an external audio player such as `ffplay`, `mpv`,
+  `pw-play`, `paplay`, `aplay`, or `afplay`.
 
 ==============================================================================
 COMMANDS					*actually-doom-commands*
@@ -26,6 +28,9 @@ COMMANDS					*actually-doom-commands*
 			If [!] or [iwad] is present then a new instance of
 			DOOM is started regardless of whether one is already
 			running.
+
+			Sound effects are played via an external audio player
+			spawned by Nvim.  Music is currently unsupported.
 
 ==============================================================================
 GAME CONTROLS				*actually-doom-game-controls*

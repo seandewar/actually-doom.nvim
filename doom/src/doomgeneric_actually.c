@@ -99,6 +99,9 @@ enum {
     // AMSG_FRAME_FINALE, text_len: u16
     AMSG_FRAME_FINALE = 11,
 
+    // AMSG_SOUND, volume: u8, sep: u8, lump_len: u32, lump_data: u8[]
+    AMSG_SOUND = 12,
+
     // AMSG_SET_TITLE, title: string
     AMSG_SET_TITLE = 1,
 
@@ -367,6 +370,20 @@ static void Comm_WriteString(const char *s)
 
     Comm_Write16(len);
     Comm_WriteBytes((byte *)s, len);
+}
+
+void DG_PlaySound(const byte *lump_data, size_t lump_len, int volume, int sep)
+{
+    if (comm_sock_fd < 0 || lump_len > UINT32_MAX)
+        return;
+
+    COMM_WRITE_MSG({
+        Comm_Write8(AMSG_SOUND);
+        Comm_Write8(volume);
+        Comm_Write8(sep);
+        Comm_Write32((uint32_t)lump_len);
+        Comm_WriteBytes(lump_data, lump_len);
+    });
 }
 
 static void UnlinkFrameShm(void);

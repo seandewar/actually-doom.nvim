@@ -28,6 +28,9 @@
 #include "i_video.h"
 #include "m_argv.h"
 #include "m_config.h"
+#include "m_misc.h"
+#include "w_wad.h"
+#include "z_zone.h"
 
 // Sound sample rate to use for digital output (Hz)
 
@@ -51,6 +54,9 @@ char *snd_musiccmd = "";
 
 static sound_module_t *sound_module = NULL;
 static music_module_t *music_module = NULL;
+static boolean dg_use_sfx_prefix = false;
+
+void DG_PlaySound(const byte *lump_data, size_t lump_len, int volume, int sep);
 
 int snd_musicdevice = SNDDEVICE_SB;
 int snd_sfxdevice = SNDDEVICE_SB;
@@ -131,6 +137,7 @@ static void InitMusicModule(void)
 void I_InitSound(boolean use_sfx_prefix)
 {
     boolean nosound, nosfx, nomusic;
+    dg_use_sfx_prefix = use_sfx_prefix;
 
     //!
     // @vanilla
@@ -180,13 +187,25 @@ void I_ShutdownSound(void)
     }
 }
 
+static int GetSfxLumpNumFallback(sfxinfo_t *sfxinfo)
+{
+    char namebuf[16];
+
+    if (dg_use_sfx_prefix) {
+        M_snprintf(namebuf, sizeof(namebuf), "ds%s", sfxinfo->name);
+    } else {
+        M_snprintf(namebuf, sizeof(namebuf), "%s", sfxinfo->name);
+    }
+
+    return W_GetNumForName(namebuf);
+}
+
 int I_GetSfxLumpNum(sfxinfo_t *sfxinfo)
 {
-    if (sound_module != NULL) {
+    if (sound_module != NULL)
         return sound_module->GetSfxLumpNum(sfxinfo);
-    } else {
-        return 0;
-    }
+
+    return GetSfxLumpNumFallback(sfxinfo);
 }
 
 void I_UpdateSound(void)
@@ -228,9 +247,16 @@ int I_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
     if (sound_module != NULL) {
         CheckVolumeSeparation(&vol, &sep);
         return sound_module->StartSound(sfxinfo, channel, vol, sep);
-    } else {
-        return 0;
     }
+
+    CheckVolumeSeparation(&vol, &sep);
+
+    int lumpnum = sfxinfo->lumpnum >= 0 ? sfxinfo->lumpnum
+                                        : GetSfxLumpNumFallback(sfxinfo);
+    void *data = W_CacheLumpNum(lumpnum, PU_STATIC);
+    DG_PlaySound(data, W_LumpLength(lumpnum), vol, sep);
+    W_ReleaseLumpNum(lumpnum);
+    return channel;
 }
 
 void I_StopSound(int channel)

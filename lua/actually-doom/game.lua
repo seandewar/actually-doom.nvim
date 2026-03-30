@@ -70,6 +70,7 @@ local M = {
 --- @field process vim.SystemObj
 --- @field sock uv.uv_pipe_t
 --- @field send_buf StrBuf
+--- @field sound ActuallyDoomSound?
 --- @field check_timer uv.uv_timer_t
 --- @field check_scheduled boolean?
 --- @field pressed_key PressedKey?
@@ -781,6 +782,19 @@ local function recv_msg_loop(doom, buf)
       end
     end,
 
+    -- AMSG_SOUND
+    [12] = function()
+      local volume = read_u8()
+      local sep = read_u8()
+      local lump = read_bytes(read_u32())
+
+      if doom.sound then
+        vim.schedule(function()
+          doom.sound:play(lump, volume, sep)
+        end)
+      end
+    end,
+
     -- AMSG_FRAME_SHM_READY
     [3] = function()
       local kitty_gfx = doom.screen:kitty_gfx()
@@ -965,6 +979,7 @@ function Doom.run(console, exe_path, opts)
   local doom = setmetatable({
     console = console,
     play_opts = opts,
+    sound = require("actually-doom.sound").new(console),
     check_timer = assert(uv.new_timer()),
     send_buf = strbuf.new(256),
     mouse_button_mask = 0,
@@ -1014,6 +1029,9 @@ function Doom:close()
   end
   if self.process then
     self.process:kill "sigterm" -- Try a clean shutdown.
+  end
+  if self.sound then
+    self.sound:close()
   end
   -- Close console before the screen so it doesn't print the "buffer was
   -- unloaded" message from us closing the screen.
