@@ -1,62 +1,22 @@
 local bit = require "bit"
 local fn = vim.fn
-local fs = vim.fs
-local uv = vim.uv
 
 --- @class (exact) ActuallyDoomSound
 --- @field console Console
---- @field backend table?
---- @field tmp_dir string?
+--- @field backend {exe: string, cmd: string[]}?
 --- @field warned_missing_backend boolean
 --- @field warned_decode boolean
---- @field active table<string, vim.SystemObj>
 ---
 --- @field new function
 local M = {}
 
 local backends = {
-  {
-    exe = "ffplay",
-    cmd = function(path)
-      return { "ffplay", "-autoexit", "-nodisp", "-loglevel", "quiet", path }
-    end,
-  },
-  {
-    exe = "mpv",
-    cmd = function(path)
-      return {
-        "mpv",
-        "--no-terminal",
-        "--really-quiet",
-        "--audio-display=no",
-        path,
-      }
-    end,
-  },
-  {
-    exe = "pw-play",
-    cmd = function(path)
-      return { "pw-play", path }
-    end,
-  },
-  {
-    exe = "paplay",
-    cmd = function(path)
-      return { "paplay", path }
-    end,
-  },
-  {
-    exe = "aplay",
-    cmd = function(path)
-      return { "aplay", "-q", path }
-    end,
-  },
-  {
-    exe = "afplay",
-    cmd = function(path)
-      return { "afplay", path }
-    end,
-  },
+  { exe = "ffplay", cmd = { "ffplay", "-autoexit", "-nodisp", "-loglevel", "quiet", "-i", "pipe:0" } },
+  { exe = "mpv", cmd = { "mpv", "--no-terminal", "--really-quiet", "--audio-display=no", "-" } },
+  { exe = "pw-play", cmd = { "pw-play", "-" } },
+  { exe = "paplay", cmd = { "paplay", "-" } },
+  { exe = "aplay", cmd = { "aplay", "-q", "-" } },
+  { exe = "afplay", cmd = { "afplay", "-" } },
 }
 
 local backend_names = "ffplay, mpv, pw-play, paplay, aplay, afplay"
@@ -112,10 +72,8 @@ local function dmx_to_wav(lump, volume)
     return nil, "DMX lump has invalid metadata"
   end
 
-  local pcm = lump:sub(9, 8 + sample_count)
-  pcm = scale_pcm_u8(pcm, volume)
-
-  local header = table.concat({
+  local pcm = scale_pcm_u8(lump:sub(9, 8 + sample_count), volume)
+  return table.concat({
     "RIFF",
     le_u32(36 + #pcm),
     "WAVE",
@@ -129,27 +87,8 @@ local function dmx_to_wav(lump, volume)
     le_u16(8),
     "data",
     le_u32(#pcm),
+    pcm,
   })
-
-  return header .. pcm
-end
-
-local function write_file(path, data)
-  local fd, open_err = uv.fs_open(path, "w", 384)
-  if not fd then
-    return nil, open_err
-  end
-
-  local written, write_err = uv.fs_write(fd, data, -1)
-  local closed_ok, close_err = uv.fs_close(fd)
-  if not written then
-    return nil, write_err
-  end
-  if not closed_ok then
-    return nil, close_err
-  end
-
-  return true
 end
 
 local function detect_backend()
@@ -160,41 +99,19 @@ local function detect_backend()
   end
 end
 
-local function cleanup_path(console, path)
-  local ok, err = pcall(fs.rm, path)
-  if not ok and err then
-    console:plugin_print(
-      ("Failed to delete temporary sound file: %s\n"):format(err),
-      "Warn"
-    )
-  end
-end
-
 --- @param console Console
 --- @return ActuallyDoomSound
 function M.new(console)
-  local tmp_dir_template =
-    fs.joinpath(fn.stdpath("run"), "actually-doom-sound.XXXXXX")
-  local tmp_dir, mkdtemp_err = uv.fs_mkdtemp(tmp_dir_template)
-  if not tmp_dir then
-    console:plugin_print(
-      ("Failed to create sound temp dir: %s\n"):format(mkdtemp_err),
-      "Warn"
-    )
-  end
-
   return setmetatable({
     console = console,
     backend = detect_backend(),
-    tmp_dir = tmp_dir,
     warned_missing_backend = false,
     warned_decode = false,
-    active = {},
   }, { __index = M })
 end
 
-function M:play(lump, volume, _sep)
-  if not self.backend or not self.tmp_dir then
+function M:play(lump, volume)
+  if not self.backend then
     if not self.warned_missing_backend then
       self.warned_missing_backend = true
       self.console:plugin_print(
@@ -218,48 +135,13 @@ function M:play(lump, volume, _sep)
     return
   end
 
-  local path = fs.joinpath(
-    self.tmp_dir,
-    ("sfx-%d-%d.wav"):format(uv.hrtime(), math.random(0, 0xffff))
-  )
-  local ok, write_err = write_file(path, wav)
-  if not ok then
-    self.console:plugin_print(
-      ("Failed to write temporary sound file: %s\n"):format(write_err),
-      "Warn"
-    )
-    return
-  end
-
-  local ok, proc = pcall(vim.system, self.backend.cmd(path), {}, function()
-    self.active[path] = nil
-    cleanup_path(self.console, path)
+  local ok, err = pcall(vim.system, self.backend.cmd, { stdin = wav }, function()
   end)
   if not ok then
-    cleanup_path(self.console, path)
     self.console:plugin_print(
-      ("Failed to play sound effect: %s\n"):format(proc),
+      ("Failed to play sound effect: %s\n"):format(err),
       "Warn"
     )
-    return
-  end
-  self.active[path] = proc
-end
-
-function M:close()
-  for path, proc in pairs(self.active) do
-    pcall(proc.kill, proc, "sigterm")
-    self.active[path] = nil
-  end
-
-  if self.tmp_dir then
-    local ok, err = pcall(fs.rm, self.tmp_dir, { recursive = true })
-    if not ok and err then
-      self.console:plugin_print(
-        ("Failed to delete sound temp dir: %s\n"):format(err),
-        "Warn"
-      )
-    end
   end
 end
 

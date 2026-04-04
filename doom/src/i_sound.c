@@ -56,7 +56,7 @@ static sound_module_t *sound_module = NULL;
 static music_module_t *music_module = NULL;
 static boolean dg_use_sfx_prefix = false;
 
-void DG_PlaySound(const byte *lump_data, size_t lump_len, int volume, int sep);
+void DG_PlaySound(const byte *lump_data, size_t lump_len, int volume);
 
 int snd_musicdevice = SNDDEVICE_SB;
 int snd_sfxdevice = SNDDEVICE_SB;
@@ -244,17 +244,16 @@ void I_UpdateSoundParams(int channel, int vol, int sep)
 
 int I_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
 {
+    CheckVolumeSeparation(&vol, &sep);
+
     if (sound_module != NULL) {
-        CheckVolumeSeparation(&vol, &sep);
         return sound_module->StartSound(sfxinfo, channel, vol, sep);
     }
 
-    CheckVolumeSeparation(&vol, &sep);
-
-    int lumpnum = sfxinfo->lumpnum >= 0 ? sfxinfo->lumpnum
-                                        : GetSfxLumpNumFallback(sfxinfo);
+    int lumpnum =
+        sfxinfo->lumpnum >= 0 ? sfxinfo->lumpnum : GetSfxLumpNumFallback(sfxinfo);
     void *data = W_CacheLumpNum(lumpnum, PU_STATIC);
-    DG_PlaySound(data, W_LumpLength(lumpnum), vol, sep);
+    DG_PlaySound(data, W_LumpLength(lumpnum), vol);
     W_ReleaseLumpNum(lumpnum);
     return channel;
 }
