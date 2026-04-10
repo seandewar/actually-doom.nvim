@@ -456,6 +456,10 @@ function Doom:flush_send()
   handle_err(err)
 end
 
+local script_path = (function()
+  return fs.abspath(debug.getinfo(2, "S").source:sub(2))
+end)()
+
 --- @param doom Doom
 --- @param exe_path string
 --- @param sock_path string
@@ -477,6 +481,11 @@ local function init_process(doom, exe_path, sock_path)
     exe_path,
     "-listen",
     sock_path,
+    "-soundfont",
+    doom.play_opts.soundfont_path or fs.normalize(
+      fs.joinpath(script_path, "../../../gzdoom.sf2"),
+      { expand_env = false }
+    ),
     "-iwad",
     doom.play_opts.iwad_path,
   }
@@ -1080,6 +1089,7 @@ end
 
 --- @class (exact) PlayOpts
 --- @field iwad_path string?
+--- @field soundfont_path string?
 --- @field kitty_graphics boolean?
 --- @field tmux_passthrough boolean?
 --- @field extra_args string[]?

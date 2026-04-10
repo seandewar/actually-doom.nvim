@@ -23,18 +23,16 @@ Install it via your favourite package manager like any other plugin, then run
 `:Doom`.
 
 The [shareware version](https://www.doomworld.com/classicdoom/info/shareware.php)
-of DOOM is included for your convenience.
-
-Sound effect playback is supported via [miniaudio](https://miniaud.io/). Music
-playback is not yet implemented.
+of DOOM and the [GZDoom](https://github.com/zdoom/gzdoom) SoundFont is included
+for your convenience.
 
 For more information regarding controls and such, consult
 `:help actually-doom.txt`.
 
 ### Controls
 
-- **Movement**: Arrow keys (hold Shift to run)
-- **Turn**: Left/Right arrows (hold Shift to turn quickly)
+- **Movement**: Arrow keys (Shift to run)
+- **Turn**: Left/Right arrows (Shift to quick-turn)
 - **Strafe**: Alt + Left/Right arrows (may not work in all terminals)
 - **Fire**: X
 - **Use/Open doors**: Space
@@ -42,8 +40,8 @@ For more information regarding controls and such, consult
 - **Toggle automap**: Tab
 - **Menu**: Escape
 - **Select menu option**: Enter
-- **Toggle renderer**: Ctrl+K (switch between kitty graphics and cell-based rendering)
-- **Stop capturing input (i.e. return control to Nvim)**: Ctrl+\\ Ctrl+N
+- **Toggle renderer**: Ctrl+K (cycle kitty graphics and cell-based rendering)
+- **Return control to Nvim**: Ctrl+\\ Ctrl+N
 
 ### Kitty graphics protocol
 
@@ -74,7 +72,7 @@ for this.
 
 Press `<C-\><C-N>`.
 
-### Why does the graphics and performance suck?
+### Why do the graphics and performance suck?
 
 You're likely using the fallback renderer that blasts-out a bunch of escape
 codes to draw to the terminal grid. See `:h actually-doom-kitty` for a much
@@ -94,6 +92,12 @@ with your changes.
 ### Why did you make this?
 
 🗿
+
+## Open source libraries used
+
+- [doomgeneric](https://github.com/ozkl/doomgeneric)
+- [miniaudio](https://miniaud.io/)
+- [TinySoundFont/TinyMidiLoader](https://github.com/schellingb/TinySoundFont)
 
 ## Testimonials
 

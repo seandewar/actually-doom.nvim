@@ -1,7 +1,6 @@
 # High priority
 
 # Medium Priority
-- [ ] Implement music support
 - [ ] Per-WAD save directory; usually trying to load a save of a different WAD
   will lead to errors.
 - [ ] Clean up the code; address some of the TODOs hanging around.

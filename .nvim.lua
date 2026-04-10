@@ -9,7 +9,7 @@ local has_bear = fn.executable('bear') == 1
 -- the usual actually-doom.nvim stdpath("data") directory.
 api.nvim_create_autocmd({ "BufNewFile", "BufReadPost" }, {
   group = api.nvim_create_augroup("actually-doom.nvim-exrc", {}),
-  pattern = "*/doom/src/*.{c,h}",
+  pattern = "*/doom/*.{c,h}",
   callback = function(_)
     vim.cmd.compiler "make"
     vim.bo.makeprg = ("%smake -j%d -C %s OUTDIR=%s"):format(

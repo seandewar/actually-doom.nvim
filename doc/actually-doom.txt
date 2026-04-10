@@ -3,7 +3,8 @@
 Author:  Sean Dewar <https://github.com/seandewar>
 License: GPL-2.0
 
-Includes the shareware version of DOOM v1.9 for your convenience.
+Includes the shareware version of DOOM v1.9 and the GZDoom 4.12.0 SoundFont
+for your convenience.
 
 ==============================================================================
 PREREQUISITES					*actually-doom-prerequisites*
@@ -26,10 +27,6 @@ COMMANDS					*actually-doom-commands*
 			If [!] or [iwad] is present then a new instance of
 			DOOM is started regardless of whether one is already
 			running.
-
-			Sound effect playback is supported via miniaudio
-			(https://miniaud.io/).  Music playback is not yet
-			implemented.
 
 ==============================================================================
 GAME CONTROLS				*actually-doom-game-controls*
@@ -161,6 +158,9 @@ play({opts})					*actually-doom.play()*
 		  Path of the IWAD file to use.  If nil, select from a menu.
 		  DOOM's current directory is set to its install directory, so
 		  non-absolute paths are relative to that.
+		• {soundfont_path} (`string?`, default: nil)
+		  Path of the SoundFont file to use for music.  If nil, uses
+		  the bundled GZDoom SoundFont (gzdoom.sf2).
 		• {kitty_graphics} (`boolean?`, default: nil)
 		  If true, enable kitty graphics protocol support.
 		  If nil and using Nvim v0.12+ in the |TUI|, auto-detect
@@ -233,5 +233,11 @@ ABOUT						*actually-doom-about*
 Grab the latest version or report a bug on GitHub:
 
 https://github.com/seandewar/actually-doom.nvim
+
+actually-doom.nvim uses the following open source libraries:
+
+- doomgeneric (https://github.com/ozkl/doomgeneric)
+- miniaudio (https://miniaud.io/)
+- TinySoundFont/TinyMidiLoader (https://github.com/schellingb/TinySoundFont)
 
  vim:tw=78:ts=8:sw=0:noet:ft=help:norl:

@@ -6,6 +6,6 @@
 #define MA_NO_RESOURCE_MANAGER
 #define MA_NO_GENERATION
 
-#include "miniaudio_full.h"
+#include "../vendor/miniaudio.h"
 
 #endif // FEATURE_SOUND
