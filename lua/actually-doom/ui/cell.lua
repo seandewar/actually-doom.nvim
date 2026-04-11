@@ -652,6 +652,11 @@ function M:refresh(
     )
   end
 
+  -- Cursor to top-left. Not required, but avoids ugly column numbers in the
+  -- ruler and Nvim internally walking the line to calculate them (e.g:
+  -- coladvance2), which may or may not improve performance slightly. :-)
+  scratch_buf:put "\27[H"
+
   -- When using RGB, it's possible for Nvim to run out of free highlight
   -- attribute entries, causing transparent cells to be drawn (showing the
   -- background colour of the Screen window) after Nvim clears and rebuilds

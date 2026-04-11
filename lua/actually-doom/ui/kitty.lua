@@ -503,6 +503,13 @@ function M:refresh()
   local old_term_width = self.screen.term_width
   local old_term_height = self.screen.term_height
   self.screen:update_term_size()
+
+  -- Cursor to top-left. Not required, but avoids ugly column numbers in the
+  -- ruler after update_term_size (especially from the diacritics!) and Nvim
+  -- internally walking the line to calculate them (e.g: coladvance2), which may
+  -- or may not improve performance slightly. :-)
+  api.nvim_chan_send(self.screen.term_chan, "\27[H")
+
   if
     not self.has_image
     or self.screen.term_width ~= old_term_width
