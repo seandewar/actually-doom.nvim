@@ -558,15 +558,13 @@ end
 --- @return CellGfx?
 --- @nodiscard
 function Screen:cell_gfx()
-  return self.gfx.type == "cell" and self.gfx --[[@as CellGfx]]
-    or nil
+  return self.gfx.type == "cell" and self.gfx --[[@as CellGfx]] or nil
 end
 
 --- @return KittyGfx?
 --- @nodiscard
 function Screen:kitty_gfx()
-  return self.gfx.type == "kitty" and self.gfx --[[@as KittyGfx]]
-    or nil
+  return self.gfx.type == "kitty" and self.gfx --[[@as KittyGfx]] or nil
 end
 
 function Screen:goto_win()
